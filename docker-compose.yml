@@ -1,0 +1,25 @@
+services:
+  api:
+    build: ./backend
+    environment:
+      DATABASE_URL: sqlite:///./data/learning.db
+      SECRET_KEY: change-this-in-production
+      CORS_ORIGINS: http://localhost:5173
+    ports:
+      - "8000:8000"
+    volumes:
+      - api-data:/app/data
+  web:
+    image: node:24-alpine
+    working_dir: /web
+    command: sh -c "npm ci && npm run dev -- --host 0.0.0.0"
+    environment:
+      VITE_API_URL: http://localhost:8000/api
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/web
+    depends_on:
+      - api
+volumes:
+  api-data:
