@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown'
 import { BookOpen, CheckCircle2, ChevronRight, CirclePlay, Code2, Flame, Home, LogOut, Menu, Play, Settings, Sparkles, Terminal, Trophy, X } from 'lucide-react'
 import './styles.css'
 
-const API = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:8000/api`
+const API = import.meta.env.VITE_API_URL || '/api'
 type Lesson = { id:number; title:string; order:number; duration:number; markdown:string; exercises:{id:number; prompt:string; starter_code:string}[] }
 type Course = { id:number; title:string; slug:string; description:string; level:string; accent:string; lessons:Lesson[] }
 type User = { id:number; name:string; email:string }

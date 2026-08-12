@@ -53,6 +53,8 @@ npm run dev
 
 Open `http://localhost:5173`. The API Swagger docs are available at `http://localhost:8000/docs`.
 
+For LAN access, open `http://<host-ip>:5173`. Vite proxies same-origin `/api` requests to FastAPI. On Windows, run `scripts/configure-windows-lan.ps1` as Administrator once to mark the active network as private and allow TCP ports 5173 and 8000 from the local subnet.
+
 ## Docker deployment
 
 ```bash
