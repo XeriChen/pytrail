@@ -14,7 +14,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-  "httpx2==2.10.0",
+  "httpx>=0.28",
 ]
 
 [tool.uv]

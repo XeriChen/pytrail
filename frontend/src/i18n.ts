@@ -268,7 +268,7 @@ export type LocalizableCourse = {
   lessons: LocalizableLesson[]
 }
 
-type LessonCopy = { title: string; markdown: string; prompt: string }
+type LessonCopy = { title: string; markdown?: string; prompt?: string }
 
 const LEVEL_COPY: Record<string, { zh: string; en: string }> = {
   beginner: { zh: '入门', en: 'Beginner' },
@@ -386,6 +386,89 @@ const LESSON_COPY: Record<string, { zh: LessonCopy; en: LessonCopy }> = {
       prompt: '',
     },
   },
+  // 20-lesson curriculum derived from Python-100-Days (Day 01-20).
+  // zh carries full copy; en falls back to the backend markdown/prompt,
+  // so only the title is mirrored here to keep the lookup consistent.
+  'getting started with python': {
+    zh: { title: '初识 Python', markdown: '## 初识 Python\n\nPython 是一门高级解释型语言，语法简洁、生态庞大、跨平台运行，是入门的好选择。\n\n从 python.org 安装 CPython 解释器，用 `python --version` 查看版本，用 `pip` 管理第三方包。', prompt: '哪条命令查看 Python 解释器版本？' },
+    en: { title: 'Getting Started with Python' },
+  },
+  'hello, world': {
+    zh: { title: '你好，世界', markdown: '## 你好，世界\n\n第一行程序只需一句：`print(\'hello, world\')`。\n\n字符串可用单引号或双引号，语句无需分号，注释以 `#` 开头。', prompt: '哪个内置函数把文字写到屏幕？' },
+    en: { title: 'Hello, World' },
+  },
+  'variables & types': {
+    zh: { title: '变量与类型', markdown: '## 变量与类型\n\n变量是名字指向值。Python 有四种核心类型：`int`、`float`、`str`、`bool`。\n\n用 `type()` 查看类型，用 `int()`、`float()`、`str()` 做转换。', prompt: '`type(3.14).__name__` 返回什么？' },
+    en: { title: 'Variables & Types' },
+  },
+  'operators & expressions': {
+    zh: { title: '运算符与表达式', markdown: '## 运算符与表达式\n\nPython 支持 `+ - * /`，还有 `//`（整除）、`%`（取余）、`**`（乘方）。\n\n比较运算返回布尔值，`and`/`or`/`not` 短路求值。用 f 字符串格式化：`f\'{x:.2f}\'`。', prompt: '`2 ** 3` 的结果是什么？' },
+    en: { title: 'Operators & Expressions' },
+  },
+  'branching with if': {
+    zh: { title: '分支结构', markdown: '## 分支结构\n\n用 `if`、`elif`、`else` 选择路径，冒号和缩进定义代码块。\n\nPython 3.10 起支持 `match`/`case` 结构化模式匹配。', prompt: '哪个关键字在 `if` 之后引入另一个条件？' },
+    en: { title: 'Branching with if' },
+  },
+  loops: {
+    zh: { title: '循环结构', markdown: '## 循环结构\n\n`for` 遍历已知序列，`while` 在条件成立时重复。`range(start, end, step)` 左闭右开。\n\n`break` 跳出循环，`continue` 跳到下一次。', prompt: '1 到 100 的整数之和是多少？' },
+    en: { title: 'Loops' },
+  },
+  'branches & loops in practice': {
+    zh: { title: '分支与循环实战', markdown: '## 分支与循环实战\n\n经典问题练手：素数、斐波那契、数字拆分。嵌套循环可暴力搜索（如百钱百鸡）。', prompt: '第 10 个斐波那契数（1, 1, 2, 3, 5, 8, ...）是多少？' },
+    en: { title: 'Branches & Loops in Practice' },
+  },
+  'lists i': {
+    zh: { title: '列表（上）', markdown: '## 列表（上）\n\n列表是有序可变序列。从 `0` 正向索引，从 `-1` 反向。切片 `[start:end:step]`。\n\n列表还支持 `+`（拼接）、`*`（重复）、`in`（成员判断）。', prompt: '对于 `lst = [10, 20, 30, 40]`，`lst[-1]` 返回什么？' },
+    en: { title: 'Lists I' },
+  },
+  'lists ii': {
+    zh: { title: '列表（下）', markdown: '## 列表（下）\n\n`append`、`insert`、`pop`、`sort` 原地修改。列表推导式 `[x for x in ...]` 简洁构造列表。\n\n`sort()` 原地排序，`sorted()` 返回新列表。', prompt: '`[x**2 for x in range(4)]` 的结果是什么？' },
+    en: { title: 'Lists II' },
+  },
+  tuples: {
+    zh: { title: '元组', markdown: '## 元组\n\n元组是不可变序列。单元素元组需尾逗号：`(100,)`。打包解包让交换更优雅：`a, b = b, a`。\n\n元组比列表更快，跨线程更安全。', prompt: '`(100,)`（注意尾逗号）的类型是什么？' },
+    en: { title: 'Tuples' },
+  },
+  strings: {
+    zh: { title: '字符串', markdown: '## 字符串\n\n字符串不可变。方法返回新串：`upper`、`find`、`replace`、`split`、`join`。\n\n用 f 字符串格式化：`f\'{pi:.2f}\'` 得到 `3.14`。', prompt: '`\'hello\'.upper()` 返回什么？' },
+    en: { title: 'Strings' },
+  },
+  sets: {
+    zh: { title: '集合', markdown: '## 集合\n\n集合无序、元素唯一，成员判断很快。\n\n运算：`&` 交、`|` 并、`-` 差、`^` 对称差。', prompt: '哪个运算符计算两个集合的交集？' },
+    en: { title: 'Sets' },
+  },
+  dictionaries: {
+    zh: { title: '字典', markdown: '## 字典\n\n字典键值映射，键必须不可变。用 `d[key]` 取值，或更安全的 `d.get(key, default)`。\n\n`d.items()` 遍历键值对，也可用推导式构造。', prompt: '哪个方法在键不存在时不报错地返回值？' },
+    en: { title: 'Dictionaries' },
+  },
+  'functions & modules': {
+    zh: { title: '函数与模块', markdown: '## 函数与模块\n\n`def` 封装可复用逻辑。参数可设默认值，`*args`、`**kwargs` 收集可变参数。\n\n每个 `.py` 文件即模块，用 `import module` 引入。', prompt: '哪个关键字用来定义函数？' },
+    en: { title: 'Functions & Modules' },
+  },
+  'functions in practice': {
+    zh: { title: '函数应用实战', markdown: '## 函数应用实战\n\n小而专的函数更易读。加类型注解：`def is_prime(n: int) -> bool:`。\n\n函数可组合：`lcm` 调用 `gcd`。', prompt: '12 和 18 的最大公约数是多少？' },
+    en: { title: 'Functions in Practice' },
+  },
+  'higher-order functions': {
+    zh: { title: '高阶函数', markdown: '## 高阶函数\n\n函数是一等公民，可作为参数或返回值。`map`、`filter`、`sorted(key=)` 是内置高阶函数。\n\n`lambda` 创建匿名函数，`functools.reduce` 把序列折叠成一个值。', prompt: '`list(map(lambda x: x * 2, [1, 2, 3]))` 返回什么？' },
+    en: { title: 'Higher-Order Functions' },
+  },
+  'decorators & recursion': {
+    zh: { title: '装饰器与递归', markdown: '## 装饰器与递归\n\n装饰器包装函数增加能力，用 `@decorator` 语法糖。\n\n递归需要收敛条件，`functools.lru_cache` 可加速斐波那契。', prompt: '哪个 `functools` 装饰器能缓存函数结果？' },
+    en: { title: 'Decorators & Recursion' },
+  },
+  'oop basics': {
+    zh: { title: '面向对象入门', markdown: '## 面向对象入门\n\n类是蓝图，对象是实例。`__init__` 初始化新对象，`self` 指向接收者。\n\n`__str__` 控制对象的打印形式。', prompt: '哪个关键字用来定义类？' },
+    en: { title: 'OOP Basics' },
+  },
+  'inheritance & polymorphism': {
+    zh: { title: '继承与多态', markdown: '## 继承与多态\n\n子类用 `class Child(Parent):` 继承，`super().__init__(...)` 调用父类。重写方法产生多态。\n\n`@property` 把方法变只读属性，`@staticmethod` 不需实例。', prompt: '哪个函数调用父类的 `__init__` 方法？' },
+    en: { title: 'Inheritance & Polymorphism' },
+  },
+  'oop in practice': {
+    zh: { title: '面向对象实战', markdown: '## 面向对象实战\n\n用对象建模现实：扑克牌、薪资系统。`enum.Enum` 命名常量，魔术方法 `__lt__` 重载运算符。\n\n`abc.ABCMeta` 定义子类必须实现的抽象接口。', prompt: '哪个魔术方法重载 `<` 运算符？' },
+    en: { title: 'OOP in Practice' },
+  },
 }
 
 function lessonLookupKey(title: string): string {
@@ -411,10 +494,10 @@ export function localizeCourse<T extends LocalizableCourse>(locale: Locale, cour
       return {
         ...lesson,
         title: copy.title,
-        markdown: copy.markdown,
+        ...(copy.markdown ? { markdown: copy.markdown } : {}),
         exercises: lesson.exercises.map((exercise, index) => ({
           ...exercise,
-          prompt: index === 0 && copy.prompt ? copy.prompt : exercise.prompt,
+          ...(index === 0 && copy.prompt ? { prompt: copy.prompt } : {}),
         })),
       }
     }),

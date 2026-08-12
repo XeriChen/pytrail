@@ -1,7 +1,11 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .database import Base
+
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class User(Base):
@@ -10,7 +14,7 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(80))
     email: Mapped[str] = mapped_column(String(160), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(256))
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     progresses: Mapped[list["Progress"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
 
@@ -54,5 +58,5 @@ class Progress(Base):
     lesson_id: Mapped[int] = mapped_column(ForeignKey("lessons.id"))
     completed: Mapped[bool] = mapped_column(Boolean, default=False)
     score: Mapped[int] = mapped_column(Integer, default=0)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
     user: Mapped[User] = relationship(back_populates="progresses")

@@ -6,3 +6,6 @@ frontend/dist/
 __pycache__/
 *.py[cod]
 .env
+# Reference material extracted from Python-100-Days-master.zip
+Python-100-Days-master/
+Python-100-Days-master.zip

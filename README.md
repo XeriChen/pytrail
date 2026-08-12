@@ -61,7 +61,11 @@ For LAN access, open `http://<host-ip>:5173`. Vite proxies same-origin `/api` re
 docker compose up --build
 ```
 
-For production, replace the SQLite URL with PostgreSQL, set a long random `SECRET_KEY`, restrict `CORS_ORIGINS`, and serve the Vite build behind an HTTPS reverse proxy. A managed Postgres database plus a container platform (Render, Fly.io, ECS, or Kubernetes) works with the same environment variables.
+For production, replace the SQLite URL with PostgreSQL, set a long random `SECRET_KEY`, set `PYTRAIL_ENV=production`, restrict `CORS_ORIGINS`, and serve the Vite build behind an HTTPS reverse proxy. A managed Postgres database plus a container platform (Render, Fly.io, ECS, or Kubernetes) works with the same environment variables.
+
+A known-default `SECRET_KEY` (`dev-only-change-me`, or the old compose placeholder) prints a conspicuous warning in development and **refuses to start** when `PYTRAIL_ENV=production` (or `ENV=production`). Compose reads `SECRET_KEY` from the host environment / `.env` and falls back to the demo default so `docker compose up` still works locally.
+
+Login and register are rate-limited per client IP (5 attempts per minute) to slow credential stuffing.
 
 ## API surface
 
@@ -69,6 +73,6 @@ For production, replace the SQLite URL with PostgreSQL, set a long random `SECRE
 - `GET /api/courses`, `GET /api/courses/{id}`
 - `GET /api/dashboard`, `POST /api/progress`
 - `POST /api/exercises/{id}/submit`
-- `POST /api/execute` (2 second timeout, 4 KB code limit for the demo runner)
+- `POST /api/execute` (requires a signed-in user; 2 second timeout, 4 KB code limit for the demo runner)
 
-The code runner is intentionally a local-demo implementation. For public production use, move execution into isolated, ephemeral containers or a sandbox service with CPU, memory, filesystem, and network limits.
+The code runner is intentionally a local-demo implementation and now requires authentication so anonymous visitors cannot trigger it. Full process isolation (ephemeral containers / gVisor / nsjail) is still out of scope for this demo. For public production use, move execution into isolated, ephemeral containers or a sandbox service with CPU, memory, filesystem, and network limits.

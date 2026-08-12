@@ -184,7 +184,7 @@ function App() {
   const [locale, setLocaleState] = useState<Locale>(() => readLocale(typeof localStorage === 'undefined' ? null : localStorage))
   const [user, setUser] = useState<User | null>(null)
   const [courses, setCourses] = useState<Course[]>([FALLBACK_COURSE])
-  const [dashboard, setDashboard] = useState<Dashboard>({ lessons_total: 4, lessons_completed: 0, completion: 0, average_score: 0, streak: 4 })
+  const [dashboard, setDashboard] = useState<Dashboard>({ lessons_total: 20, lessons_completed: 0, completion: 0, average_score: 0, streak: 0 })
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null)
   const [tab, setTab] = useState<Tab>('overview')
   const [authOpen, setAuthOpen] = useState(false)
@@ -315,7 +315,7 @@ function App() {
             />
           )}
           {tab === 'course' && (
-            <CourseView course={course} selectedLesson={activeLesson} openLesson={openLesson} user={user} onAuth={() => setAuthOpen(true)} />
+            <CourseView course={course} selectedLesson={activeLesson} openLesson={openLesson} user={user} onAuth={() => setAuthOpen(true)} completion={dashboard.completion} />
           )}
           {tab === 'practice' && <PracticeView course={course} openLesson={openLesson} />}
         </main>
@@ -524,12 +524,14 @@ function CourseView({
   openLesson,
   user,
   onAuth,
+  completion,
 }: {
   course?: Course
   selectedLesson: Lesson | null
   openLesson: (lesson: Lesson) => void
   user: User | null
   onAuth: () => void
+  completion: number
 }) {
   const { tx } = useI18n()
   const lesson = selectedLesson || course?.lessons[0]
@@ -544,7 +546,7 @@ function CourseView({
           <p className="lede">{course?.description}</p>
         </div>
         <div className="course-progress-chip">
-          <strong>0%</strong>
+          <strong>{completion}%</strong>
           <span>{tx('course.complete')}</span>
         </div>
       </div>
@@ -604,8 +606,8 @@ function CodeRunner({ initial }: { initial: string }) {
     try {
       const result = await request<{ stdout: string; stderr: string; ok: boolean }>('/execute', { method: 'POST', body: JSON.stringify({ code }) }, tx('request.failed'))
       setOutput(result.stdout || result.stderr || tx('playground.output'))
-    } catch {
-      setOutput(tx('playground.offline'))
+    } catch (err) {
+      setOutput((err as Error).message || tx('playground.offline'))
     } finally {
       setRunning(false)
     }

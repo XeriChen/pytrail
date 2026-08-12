@@ -109,6 +109,9 @@ describe('interface invariants', () => {
     expect(main).toContain('localizeCourse')
     expect(main).not.toContain('PYTHON 101')
     expect(main).not.toMatch(/display-latin">PRACTICE/)
+    expect(main).not.toMatch(/<strong>0%<\/strong>/)
+    expect(main).toMatch(/completion}%/)
+    expect(main).toContain('completion={dashboard.completion}')
   })
 
   it('localizes known course and lesson copy through the shipped helper', () => {

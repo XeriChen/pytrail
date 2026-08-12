@@ -3,7 +3,8 @@ services:
     build: ./backend
     environment:
       DATABASE_URL: sqlite:///./data/learning.db
-      SECRET_KEY: change-this-in-production
+      SECRET_KEY: ${SECRET_KEY:-dev-only-change-me}
+      PYTRAIL_ENV: ${PYTRAIL_ENV:-development}
       CORS_ORIGINS: http://localhost:5173
     ports:
       - "8000:8000"
