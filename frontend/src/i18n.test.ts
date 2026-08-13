@@ -105,7 +105,9 @@ describe('interface invariants', () => {
     expect(main).toContain('data-testid="quick-check"')
     expect(main).toContain('data-testid="lang-control"')
     expect(main).toContain('<TrailCanvas')
-    expect(main).toContain('FALLBACK_COURSE')
+    expect(main).toContain('CourseSummary')
+    expect(main).toContain('loadCourses')
+    expect(main).toContain('loadLesson')
     expect(main).toContain('localizeCourse')
     expect(main).not.toContain('PYTHON 101')
     expect(main).not.toMatch(/display-latin">PRACTICE/)
@@ -114,38 +116,23 @@ describe('interface invariants', () => {
     expect(main).toContain('completion={dashboard.completion}')
   })
 
-  it('localizes known course and lesson copy through the shipped helper', () => {
+  it('localizes only course-level copy and leaves lesson Markdown untouched', () => {
     const raw = {
+      id: 1,
       title: 'Python Foundations',
       slug: 'python-foundations',
       description: 'Build a confident Python foundation through short, practical lessons.',
       level: 'Beginner',
-      lessons: [
-        {
-          title: 'Hello, trail',
-          order: 1,
-          markdown: '## Start here',
-          exercises: [{ prompt: 'What function writes text to the console?' }],
-        },
-        {
-          title: 'Variables & data types',
-          order: 1,
-          markdown: '# Variables',
-          exercises: [{ prompt: 'What does `type(3.14).__name__` return?' }],
-        },
-      ],
     }
     const zh = localizeCourse('zh', raw)
     const en = localizeCourse('en', raw)
     expect(hasCJK(zh.title)).toBe(true)
     expect(hasCJK(zh.description)).toBe(true)
     expect(zh.level).toBe('入门')
-    expect(hasCJK(zh.lessons[0].title)).toBe(true)
-    expect(hasCJK(zh.lessons[0].exercises[0].prompt)).toBe(true)
-    expect(hasCJK(zh.lessons[1].title)).toBe(true)
     expect(en.title).toBe('Python Foundations')
-    expect(en.lessons[0].title).toBe('Hello, trail')
+    expect(en.level).toBe('Beginner')
     expect(localizeLevel('zh', 'beginner')).toBe('入门')
+    expect(localizeLevel('en', 'advanced')).toBe('Advanced')
     expect(t('zh', 'code.welcome')).toContain('欢迎')
   })
 

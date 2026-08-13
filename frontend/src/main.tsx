@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import ReactMarkdown from 'react-markdown'
 import {
+  ArrowLeft,
+  ArrowRight,
   BookOpen,
   CheckCircle2,
   ChevronRight,
@@ -15,6 +16,7 @@ import {
   LogOut,
   Menu,
   Play,
+  RotateCcw,
   Settings,
   Terminal,
   Trophy,
@@ -31,58 +33,20 @@ import {
   t,
   writeLocale,
 } from './i18n'
+import { CourseMarkdown } from './markdown'
 import { Particle, Vec, cardTilt, createParticles, particleColor, stepScene } from './motion'
 import './styles.css'
 
 const API = import.meta.env.VITE_API_URL || '/api'
-type Lesson = { id: number; title: string; order: number; duration: number; markdown: string; exercises: { id: number; prompt: string; starter_code: string }[] }
-type Course = { id: number; title: string; slug: string; description: string; level: string; accent: string; lessons: Lesson[] }
+type Exercise = { id: number; prompt: string; starter_code: string }
+type CourseSummary = { id: number; slug: string; title: string; description: string; level: string; accent: string; lesson_count: number; total_duration: number }
+type LessonSummary = { id: number; title: string; order: number; duration: number; has_exercises: boolean }
+type CourseDetail = CourseSummary & { lessons: LessonSummary[] }
+type LessonDetail = LessonSummary & { course_id: number; course_slug: string; markdown: string; exercises: Exercise[]; asset_base_url: string; lesson_links: Record<string, number> }
 type User = { id: number; name: string; email: string }
 type Dashboard = { lessons_total: number; lessons_completed: number; completion: number; average_score: number; streak: number }
 type Tab = 'overview' | 'course' | 'practice'
-
-const FALLBACK_COURSE: Course = {
-  id: 1,
-  title: 'Python Foundations',
-  slug: 'python-foundations',
-  description: 'Syntax, types, and the first trail through Python.',
-  level: 'beginner',
-  accent: 'cinnabar',
-  lessons: [
-    {
-      id: 1,
-      title: 'Hello, trail',
-      order: 1,
-      duration: 8,
-      markdown: '## Start here\n\nPrint a greeting and learn how a Python file becomes a trail of output.',
-      exercises: [{ id: 1, prompt: 'What function writes text to the console?', starter_code: 'print("Hello, Python!")' }],
-    },
-    {
-      id: 2,
-      title: 'Names and values',
-      order: 2,
-      duration: 10,
-      markdown: '## Variables\n\nBind a name to a value, then reuse it.',
-      exercises: [{ id: 2, prompt: 'Which operator assigns a value to a name?', starter_code: 'name = "PyTrail"\nprint(name)' }],
-    },
-    {
-      id: 3,
-      title: 'Branching paths',
-      order: 3,
-      duration: 12,
-      markdown: '## Conditionals\n\nChoose a path with `if` and `else`.',
-      exercises: [{ id: 3, prompt: 'Which keyword starts a conditional branch?', starter_code: 'score = 90\nif score > 80:\n    print("ok")' }],
-    },
-    {
-      id: 4,
-      title: 'Loops along the path',
-      order: 4,
-      duration: 12,
-      markdown: '## Loops\n\nRepeat work with `for` and `while`.',
-      exercises: [{ id: 4, prompt: 'Which keyword iterates over a sequence?', starter_code: 'for n in range(3):\n    print(n)' }],
-    },
-  ],
-}
+type LoadState = 'idle' | 'loading' | 'success' | 'error' | 'empty'
 
 type I18n = {
   locale: Locale
@@ -183,13 +147,29 @@ function TrailCanvas({ pointer }: { pointer: Vec }) {
 function App() {
   const [locale, setLocaleState] = useState<Locale>(() => readLocale(typeof localStorage === 'undefined' ? null : localStorage))
   const [user, setUser] = useState<User | null>(null)
-  const [courses, setCourses] = useState<Course[]>([FALLBACK_COURSE])
-  const [dashboard, setDashboard] = useState<Dashboard>({ lessons_total: 20, lessons_completed: 0, completion: 0, average_score: 0, streak: 0 })
-  const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null)
+  const [dashboard, setDashboard] = useState<Dashboard>({ lessons_total: 0, lessons_completed: 0, completion: 0, average_score: 0, streak: 0 })
   const [tab, setTab] = useState<Tab>('overview')
   const [authOpen, setAuthOpen] = useState(false)
   const [mobileNav, setMobileNav] = useState(false)
   const [pointer, setPointer] = useState<Vec>({ x: 280, y: 220 })
+
+  const [courses, setCourses] = useState<CourseSummary[]>([])
+  const [catalogState, setCatalogState] = useState<LoadState>('idle')
+
+  const [selectedCourse, setSelectedCourse] = useState<CourseDetail | null>(null)
+  const [courseState, setCourseState] = useState<LoadState>('idle')
+  const [courseTargetId, setCourseTargetId] = useState<number | null>(null)
+
+  const [selectedLesson, setSelectedLesson] = useState<LessonDetail | null>(null)
+  const [lessonState, setLessonState] = useState<LoadState>('idle')
+  const [lessonTargetId, setLessonTargetId] = useState<number | null>(null)
+
+  const [foundation, setFoundation] = useState<CourseDetail | null>(null)
+
+  const courseReqId = useRef<number | null>(null)
+  const lessonReqId = useRef<number | null>(null)
+  const selectedCourseRef = useRef<CourseDetail | null>(null)
+
   const failed = t(locale, 'request.failed')
 
   const setLocale = (next: Locale) => {
@@ -204,8 +184,61 @@ function App() {
     document.title = locale === 'zh' ? 'PyTrail · 墨径' : 'PyTrail'
   }, [locale])
 
+  const loadLesson = (id: number) => {
+    lessonReqId.current = id
+    setLessonTargetId(id)
+    setSelectedLesson(null)
+    setLessonState('loading')
+    request<LessonDetail>(`/lessons/${id}`, {}, failed)
+      .then((data) => {
+        if (lessonReqId.current !== id) return
+        setSelectedLesson(data)
+        setLessonState('success')
+        if (!selectedCourseRef.current || selectedCourseRef.current.id !== data.course_id) {
+          loadCourse(data.course_id, false)
+        }
+      })
+      .catch(() => {
+        if (lessonReqId.current === id) setLessonState('error')
+      })
+  }
+
+  const loadCourse = (id: number, autoSelectFirst = true) => {
+    courseReqId.current = id
+    setCourseTargetId(id)
+    setSelectedCourse(null)
+    setCourseState('loading')
+    request<CourseDetail>(`/courses/${id}`, {}, failed)
+      .then((data) => {
+        if (courseReqId.current !== id) return
+        setSelectedCourse(data)
+        selectedCourseRef.current = data
+        setCourseState(data.lessons.length ? 'success' : 'empty')
+        if (autoSelectFirst && data.lessons[0]) loadLesson(data.lessons[0].id)
+      })
+      .catch(() => {
+        if (courseReqId.current === id) setCourseState('error')
+      })
+  }
+
+  const loadCourses = () => {
+    setCatalogState('loading')
+    request<CourseSummary[]>('/courses', {}, failed)
+      .then((data) => {
+        setCourses(data)
+        setCatalogState(data.length ? 'success' : 'empty')
+        const foundations = data.find((course) => course.slug === 'python-foundations')
+        if (foundations) {
+          request<CourseDetail>(`/courses/${foundations.id}`, {}, failed)
+            .then(setFoundation)
+            .catch(() => {})
+        }
+      })
+      .catch(() => setCatalogState('error'))
+  }
+
   useEffect(() => {
-    request<Course[]>('/courses', {}, failed).then(setCourses).catch(() => {})
+    loadCourses()
     if (localStorage.getItem('pytrail_token')) {
       request<User>('/auth/me', {}, failed)
         .then((u) => {
@@ -214,29 +247,46 @@ function App() {
         })
         .catch(() => localStorage.removeItem('pytrail_token'))
     }
-  }, [failed])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  const course = useMemo(() => {
-    const raw = courses[0]
-    return raw ? localizeCourse(locale, raw) : undefined
-  }, [courses, locale])
-  const recent = useMemo(() => course?.lessons.slice(0, 3) || [], [course])
-  const activeLesson = useMemo(() => {
-    if (!selectedLesson || !course) return selectedLesson
-    return course.lessons.find((item) => item.id === selectedLesson.id) || selectedLesson
-  }, [selectedLesson, course])
-  const openLesson = (lesson: Lesson | undefined) => {
-    if (!lesson) return
-    setSelectedLesson(lesson)
+  const openCourse = (course: CourseSummary) => {
     setTab('course')
     setMobileNav(false)
+    loadCourse(course.id)
   }
+
+  const openLesson = (lesson: LessonSummary) => {
+    setTab('course')
+    setMobileNav(false)
+    loadLesson(lesson.id)
+  }
+
+  const onLessonLink = (targetId: number) => {
+    setTab('course')
+    loadLesson(targetId)
+  }
+
+  const openFoundation = () => {
+    setTab('practice')
+    setMobileNav(false)
+    if (!foundation) {
+      const foundations = courses.find((course) => course.slug === 'python-foundations')
+      if (foundations) {
+        request<CourseDetail>(`/courses/${foundations.id}`, {}, failed)
+          .then(setFoundation)
+          .catch(() => {})
+      }
+    }
+  }
+
   const signOut = () => {
     localStorage.removeItem('pytrail_token')
     setUser(null)
   }
+
   const crumb =
-    tab === 'overview' ? tx('crumb.overview') : tab === 'course' ? course?.title || tx('course.fallbackTitle') : tx('crumb.practice')
+    tab === 'overview' ? tx('crumb.overview') : tab === 'course' ? (selectedCourse ? localizeCourse(locale, selectedCourse).title : tx('course.fallbackTitle')) : tx('crumb.practice')
 
   return (
     <I18nContext.Provider value={{ locale, setLocale, tx }}>
@@ -258,9 +308,9 @@ function App() {
             <span className="brand-sub">{tx('brand.sub')}</span>
           </div>
           <nav className="spine-nav">
-            <NavBtn active={tab === 'overview'} index="01" icon={<Home size={16} />} label={tx('nav.overview')} testId="nav-overview" onClick={() => { setTab('overview'); setSelectedLesson(null); setMobileNav(false) }} />
-            <NavBtn active={tab === 'course'} index="02" icon={<BookOpen size={16} />} label={tx('nav.course')} testId="nav-course" count="1" onClick={() => { setTab('course'); setMobileNav(false) }} />
-            <NavBtn active={tab === 'practice'} index="03" icon={<Code2 size={16} />} label={tx('nav.practice')} testId="nav-practice" pill={tx('nav.new')} onClick={() => { setTab('practice'); setMobileNav(false) }} />
+            <NavBtn active={tab === 'overview'} index="01" icon={<Home size={16} />} label={tx('nav.overview')} testId="nav-overview" onClick={() => { setTab('overview'); setMobileNav(false) }} />
+            <NavBtn active={tab === 'course'} index="02" icon={<BookOpen size={16} />} label={tx('nav.course')} testId="nav-course" onClick={() => { setTab('course'); setMobileNav(false) }} />
+            <NavBtn active={tab === 'practice'} index="03" icon={<Code2 size={16} />} label={tx('nav.practice')} testId="nav-practice" pill={tx('nav.new')} onClick={openFoundation} />
           </nav>
           <div className="spine-foot">
             <LangSwitch />
@@ -306,18 +356,33 @@ function App() {
           </header>
           {tab === 'overview' && (
             <Overview
-              course={course}
-              lessons={recent}
+              courses={courses}
+              catalogState={catalogState}
               dashboard={dashboard}
-              openLesson={openLesson}
-              onStart={() => openLesson(course?.lessons[0])}
+              openCourse={openCourse}
+              onRetry={loadCourses}
               pointer={pointer}
             />
           )}
           {tab === 'course' && (
-            <CourseView course={course} selectedLesson={activeLesson} openLesson={openLesson} user={user} onAuth={() => setAuthOpen(true)} completion={dashboard.completion} />
+            <CourseView
+              courses={courses}
+              course={selectedCourse}
+              courseState={courseState}
+              lesson={selectedLesson}
+              lessonState={lessonState}
+              openCourse={openCourse}
+              openLesson={openLesson}
+              onLessonLink={onLessonLink}
+              onBack={() => setTab('overview')}
+              onRetryCourse={() => courseTargetId != null && loadCourse(courseTargetId)}
+              onRetryLesson={() => lessonTargetId != null && loadLesson(lessonTargetId)}
+              user={user}
+              onAuth={() => setAuthOpen(true)}
+              completion={dashboard.completion}
+            />
           )}
-          {tab === 'practice' && <PracticeView course={course} openLesson={openLesson} />}
+          {tab === 'practice' && <PracticeView foundation={foundation} openLesson={openLesson} />}
         </main>
         {authOpen && (
           <AuthModal
@@ -381,22 +446,23 @@ function LangSwitch() {
 }
 
 function Overview({
-  course,
-  lessons,
+  courses,
+  catalogState,
   dashboard,
-  openLesson,
-  onStart,
+  openCourse,
+  onRetry,
   pointer,
 }: {
-  course?: Course
-  lessons: Lesson[]
+  courses: CourseSummary[]
+  catalogState: LoadState
   dashboard: Dashboard
-  openLesson: (lesson: Lesson) => void
-  onStart: () => void
+  openCourse: (course: CourseSummary) => void
+  onRetry: () => void
   pointer: Vec
 }) {
   const { locale, tx } = useI18n()
   const greet = greetingKeys()
+  const localized = useMemo(() => courses.map((course) => localizeCourse(locale, course)), [courses, locale])
   return (
     <div className="page overview-page" data-surface="overview">
       <section className="hero">
@@ -407,7 +473,7 @@ function Overview({
           <i className="display-dot" />
         </h1>
         <p className="lede">{tx('overview.tagline')}</p>
-        <button className="primary-btn" type="button" onClick={onStart}>
+        <button className="primary-btn" type="button" onClick={() => courses[0] && openCourse(courses[0])}>
           <CirclePlay size={18} /> {tx('overview.continue')}
         </button>
       </section>
@@ -418,67 +484,43 @@ function Overview({
       </section>
       <section className="section-heading">
         <div>
-          <p className="eyebrow">{tx('path.eyebrow')}</p>
-          <h2>{tx('path.heading')}</h2>
+          <p className="eyebrow">{tx('catalog.eyebrow')}</p>
+          <h2>{tx('catalog.heading')}</h2>
         </div>
-        <button className="link-btn" type="button" onClick={onStart}>
-          {tx('path.viewCourse')} <ChevronRight size={16} />
-        </button>
       </section>
-      {course && (
-        <article className="course-feature">
-          <div className="course-copy">
-            <div className="course-badge">
-              {tx('course.badge')} <span>/</span> {course.level}
-            </div>
-            <h3>{course.title}</h3>
-            <p>{course.description}</p>
-            <div className="progress-line">
-              <span style={{ width: `${Math.max(dashboard.completion, 8)}%` }} />
-            </div>
-            <div className="course-meta">
-              <span>{tx('course.lessonsCount', { n: dashboard.lessons_completed, total: course.lessons.length })}</span>
-              <span>{tx('course.durationTotal', { n: course.lessons.reduce((a, l) => a + l.duration, 0) })}</span>
-            </div>
-          </div>
-          <div className="course-visual">
-            <div className="code-window">
-              <div className="window-bar">
-                <i />
-                <i />
-                <i />
-              </div>
-              <pre>
-                <span className="pink">def</span> <span className="yellow">hello</span>(name):{'\n'}    <span className="pink">return</span> <span className="green">f</span>
-                <span className="green">"{tx('code.welcome')}"</span>
-              </pre>
-              <span className="play-float">
-                <Play size={15} />
-              </span>
-            </div>
-          </div>
-        </article>
+      {catalogState === 'loading' && <StatePanel kind="loading" />}
+      {catalogState === 'error' && <StatePanel kind="error" onRetry={onRetry} />}
+      {catalogState === 'empty' && <StatePanel kind="empty" />}
+      {catalogState === 'success' && (
+        <div className="course-catalog">
+          {localized.map((course) => (
+            <CourseCard key={course.id} course={course} onLearn={() => openCourse(course)} />
+          ))}
+        </div>
       )}
-      <section className="section-heading compact">
-        <div>
-          <p className="eyebrow">{tx('recent.eyebrow')}</p>
-          <h2>{tx('recent.heading')}</h2>
-        </div>
-      </section>
-      <div className="lesson-list">
-        {lessons.map((lesson, i) => (
-          <button className="lesson-row" key={lesson.id} type="button" onClick={() => openLesson(lesson)}>
-            <span className={`lesson-index ${i === 0 ? 'current' : ''}`}>{i === 0 ? <Play size={13} /> : String(lesson.order).padStart(2, '0')}</span>
-            <span className="lesson-title">
-              <strong>{lesson.title}</strong>
-              <small>{course?.title || tx('course.fallbackTitle')}</small>
-            </span>
-            <span className="lesson-duration">{tx('recent.minutes', { n: lesson.duration })}</span>
-            <ChevronRight size={17} />
-          </button>
-        ))}
-      </div>
     </div>
+  )
+}
+
+function CourseCard({ course, onLearn }: { course: CourseSummary; onLearn: () => void }) {
+  const { tx } = useI18n()
+  return (
+    <article className="course-card" data-testid="course-card">
+      <div className={`course-card-accent ${course.accent}`} />
+      <div className="course-card-head">
+        <span className="course-badge">{tx('course.badge')}</span>
+        <span className="course-level">{course.level}</span>
+      </div>
+      <h3>{course.title}</h3>
+      <p>{course.description}</p>
+      <div className="course-card-meta">
+        <span>{tx('course.lessonTotal', { n: course.lesson_count })}</span>
+        <span>{tx('course.durationTotal', { n: course.total_duration })}</span>
+      </div>
+      <button className="secondary-btn" type="button" onClick={onLearn}>
+        {tx('catalog.learn')} <ChevronRight size={15} />
+      </button>
+    </article>
   )
 }
 
@@ -519,76 +561,150 @@ function Stat({
 }
 
 function CourseView({
+  courses,
   course,
-  selectedLesson,
+  courseState,
+  lesson,
+  lessonState,
+  openCourse,
   openLesson,
+  onLessonLink,
+  onBack,
+  onRetryCourse,
+  onRetryLesson,
   user,
   onAuth,
   completion,
 }: {
-  course?: Course
-  selectedLesson: Lesson | null
-  openLesson: (lesson: Lesson) => void
+  courses: CourseSummary[]
+  course: CourseDetail | null
+  courseState: LoadState
+  lesson: LessonDetail | null
+  lessonState: LoadState
+  openCourse: (course: CourseSummary) => void
+  openLesson: (lesson: LessonSummary) => void
+  onLessonLink: (targetId: number) => void
+  onBack: () => void
+  onRetryCourse: () => void
+  onRetryLesson: () => void
   user: User | null
   onAuth: () => void
   completion: number
 }) {
-  const { tx } = useI18n()
-  const lesson = selectedLesson || course?.lessons[0]
+  const { locale, tx } = useI18n()
+  const localized = course ? localizeCourse(locale, course) : undefined
+  const lessons = course?.lessons ?? []
+  const currentIndex = lesson ? lessons.findIndex((item) => item.id === lesson.id) : -1
+  const prev = currentIndex > 0 ? lessons[currentIndex - 1] : null
+  const next = currentIndex >= 0 && currentIndex < lessons.length - 1 ? lessons[currentIndex + 1] : null
   return (
     <div className="page course-page" data-surface="course">
       <div className="course-header">
         <div>
+          <button className="link-btn back-btn" type="button" onClick={onBack}>
+            <ArrowLeft size={15} /> {tx('course.back')}
+          </button>
           <p className="eyebrow">
             {tx('course.kicker')} / {tx('course.badge')}
           </p>
-          <h1>{course?.title || tx('course.fallbackTitle')}</h1>
-          <p className="lede">{course?.description}</p>
+          <h1>{localized?.title || tx('course.fallbackTitle')}</h1>
+          <p className="lede">{localized?.description}</p>
         </div>
-        <div className="course-progress-chip">
-          <strong>{completion}%</strong>
-          <span>{tx('course.complete')}</span>
+        <div className="course-header-right">
+          <label className="course-switch">
+            <span>{tx('course.switch')}</span>
+            <select
+              value={course?.id ?? ''}
+              onChange={(e) => {
+                const target = courses.find((item) => item.id === Number(e.target.value))
+                if (target) openCourse(target)
+              }}
+            >
+              {courses.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {localizeCourse(locale, item).title}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="course-progress-chip">
+            <strong>{completion}%</strong>
+            <span>{tx('course.complete')}</span>
+          </div>
         </div>
       </div>
-      <div className="course-layout">
-        <aside className="lesson-sidebar">
-          <p className="eyebrow">{tx('course.lessons')}</p>
-          {course?.lessons.map((item, idx) => (
-            <button key={item.id} className={`lesson-nav ${lesson?.id === item.id ? 'selected' : ''}`} type="button" onClick={() => openLesson(item)}>
-              <span>{String(idx + 1).padStart(2, '0')}</span>
-              <span>
-                {item.title}
-                <small>{tx('recent.minutes', { n: item.duration })}</small>
-              </span>
-              {idx === 0 && <CheckCircle2 size={16} />}
-            </button>
-          ))}
-        </aside>
-        <article className="lesson-content">
-          {lesson ? (
-            <>
-              <div className="lesson-kicker">{tx('course.lessonMeta', { n: lesson.order, duration: lesson.duration })}</div>
-              <h2>{lesson.title}</h2>
-              <div className="markdown">
-                <ReactMarkdown>{lesson.markdown}</ReactMarkdown>
-              </div>
-              <CodeRunner initial={lesson.exercises[0]?.starter_code || 'print("Hello, Python!")'} />
-              {lesson.exercises[0] && <ExerciseCard exercise={lesson.exercises[0]} user={user} onAuth={onAuth} />}
-              {!user && (
-                <div className="signin-note">
-                  <Globe size={17} />
-                  <span>{tx('signin.note')}</span>
-                  <button className="link-btn" type="button" onClick={onAuth}>
-                    {tx('signin.cta')}
+      {courseState === 'loading' && <StatePanel kind="loading" />}
+      {courseState === 'error' && <StatePanel kind="error" onRetry={onRetryCourse} />}
+      {courseState === 'empty' && <StatePanel kind="empty" />}
+      {courseState === 'success' && (
+        <div className="course-layout">
+          <aside className="lesson-sidebar">
+            <p className="eyebrow">{tx('course.chapters')}</p>
+            {lessons.map((item, idx) => (
+              <button key={item.id} className={`lesson-nav ${lesson?.id === item.id ? 'selected' : ''}`} type="button" onClick={() => openLesson(item)}>
+                <span>{String(item.order).padStart(2, '0')}</span>
+                <span>
+                  {item.title}
+                  <small>{tx('recent.minutes', { n: item.duration })}</small>
+                </span>
+                {idx === 0 && <CheckCircle2 size={16} />}
+              </button>
+            ))}
+          </aside>
+          <article className="lesson-content">
+            {lessonState === 'loading' && <StatePanel kind="loading" />}
+            {lessonState === 'error' && <StatePanel kind="error" onRetry={onRetryLesson} />}
+            {lessonState === 'success' && lesson && (
+              <>
+                <div className="lesson-kicker">{tx('course.lessonMeta', { n: lesson.order, duration: lesson.duration })}</div>
+                <h2>{lesson.title}</h2>
+                <CourseMarkdown markdown={lesson.markdown} assetBaseUrl={lesson.asset_base_url} lessonLinks={lesson.lesson_links} onLessonLink={onLessonLink} />
+                <CodeRunner initial={lesson.exercises[0]?.starter_code || 'print("Hello, Python!")'} />
+                {lesson.exercises.length > 0 ? (
+                  <ExerciseCard exercise={lesson.exercises[0]} user={user} onAuth={onAuth} />
+                ) : (
+                  <div className="exercise-none">
+                    <Code2 size={16} /> <span>{tx('exercise.none')}</span>
+                  </div>
+                )}
+                {!user && (
+                  <div className="signin-note">
+                    <Globe size={17} />
+                    <span>{tx('signin.note')}</span>
+                    <button className="link-btn" type="button" onClick={onAuth}>
+                      {tx('signin.cta')}
+                    </button>
+                  </div>
+                )}
+                <div className="lesson-nav-actions">
+                  <button className="secondary-btn" type="button" disabled={!prev} onClick={() => prev && openLesson(prev)}>
+                    <ArrowLeft size={15} /> {tx('lesson.prev')}
+                  </button>
+                  <button className="secondary-btn" type="button" disabled={!next} onClick={() => next && openLesson(next)}>
+                    {tx('lesson.next')} <ArrowRight size={15} />
                   </button>
                 </div>
-              )}
-            </>
-          ) : (
-            <EmptyState />
-          )}
-        </article>
-      </div>
+              </>
+            )}
+          </article>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function StatePanel({ kind, onRetry }: { kind: 'loading' | 'error' | 'empty'; onRetry?: () => void }) {
+  const { tx } = useI18n()
+  const icon = kind === 'loading' ? <RotateCcw size={22} className="spin" /> : kind === 'error' ? <X size={22} /> : <BookOpen size={22} />
+  return (
+    <div className={`state-panel ${kind}`} data-testid={`state-${kind}`}>
+      {icon}
+      <p>{kind === 'loading' ? tx('state.loading') : kind === 'error' ? tx('state.failure') : tx('state.empty')}</p>
+      {kind === 'error' && onRetry && (
+        <button className="secondary-btn" type="button" onClick={onRetry}>
+          <RotateCcw size={14} /> {tx('state.retry')}
+        </button>
+      )}
     </div>
   )
 }
@@ -637,7 +753,7 @@ function ExerciseCard({
   user,
   onAuth,
 }: {
-  exercise: { id: number; prompt: string }
+  exercise: Exercise
   user: User | null
   onAuth: () => void
 }) {
@@ -669,8 +785,9 @@ function ExerciseCard({
   )
 }
 
-function PracticeView({ course, openLesson }: { course?: Course; openLesson: (lesson: Lesson) => void }) {
-  const { tx } = useI18n()
+function PracticeView({ foundation, openLesson }: { foundation: CourseDetail | null; openLesson: (lesson: LessonSummary) => void }) {
+  const { locale, tx } = useI18n()
+  const localized = foundation ? localizeCourse(locale, foundation) : undefined
   return (
     <div className="page practice-page" data-surface="practice">
       <div className="hero compact-hero">
@@ -682,31 +799,24 @@ function PracticeView({ course, openLesson }: { course?: Course; openLesson: (le
         </h1>
         <p className="lede">{tx('practice.tagline')}</p>
       </div>
-      <div className="practice-grid">
-        {course?.lessons.map((lesson, i) => (
-          <button className="practice-card" key={lesson.id} type="button" onClick={() => openLesson(lesson)}>
-            <div className="practice-number">{String(i + 1).padStart(2, '0')}</div>
-            <div>
-              <h3>{lesson.title}</h3>
-              <p>{lesson.exercises[0]?.prompt || tx('practice.fallback')}</p>
-              <span>
-                {tx('practice.open')} <ChevronRight size={15} />
-              </span>
-            </div>
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function EmptyState() {
-  const { tx } = useI18n()
-  return (
-    <div className="empty">
-      <BookOpen size={28} />
-      <h2>{tx('empty.title')}</h2>
-      <p>{tx('empty.body')}</p>
+      {!foundation ? (
+        <StatePanel kind="loading" />
+      ) : (
+        <div className="practice-grid">
+          {localized?.lessons.map((lesson, i) => (
+            <button className="practice-card" key={lesson.id} type="button" onClick={() => openLesson(lesson)}>
+              <div className="practice-number">{String(i + 1).padStart(2, '0')}</div>
+              <div>
+                <h3>{lesson.title}</h3>
+                <p>{lesson.has_exercises ? tx('practice.open') : tx('practice.fallback')}</p>
+                <span>
+                  {tx('practice.open')} <ChevronRight size={15} />
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
