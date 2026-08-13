@@ -7,6 +7,7 @@ PyTrail is a modern, responsive Python learning platform built as a small full-s
 - Web: React 19, TypeScript 7, Vite 8, React Markdown, Lucide icons
 - API: FastAPI, SQLAlchemy 2, Pydantic 2, JWT authentication, SQLite by default
 - Production database: set `DATABASE_URL` to a PostgreSQL connection string such as `postgresql+psycopg://user:password@host/db`
+- Course content: 9 courses / 102 lessons synced from a Markdown content tree into SQLite at startup
 - Delivery: Docker Compose for local deployment and GitHub Actions for CI
 
 ## Structure
@@ -15,17 +16,20 @@ PyTrail is a modern, responsive Python learning platform built as a small full-s
 .
 ├── backend/
 │   ├── app/
-│   │   ├── auth.py       # password hashing, JWT, current-user dependency
-│   │   ├── database.py   # SQLAlchemy engine/session
-│   │   ├── main.py       # REST endpoints and seed content
-│   │   ├── models.py     # User, Course, Lesson, Exercise, Progress
-│   │   └── schemas.py    # Pydantic request/response models
+│   │   ├── auth.py        # password hashing, JWT, current-user dependency
+│   │   ├── course_sync.py  # content-tree -> DB sync, content index
+│   │   ├── database.py    # SQLAlchemy engine/session
+│   │   ├── main.py        # REST endpoints
+│   │   ├── models.py      # User, Course, Lesson, Exercise, Progress
+│   │   └── schemas.py     # Pydantic request/response models
+│   ├── content/          # Markdown course tree (python-100-days/*)
 │   ├── Dockerfile
 │   ├── pyproject.toml   # project metadata and dependencies
 │   └── uv.lock          # reproducible dependency lockfile
 ├── frontend/
-│   ├── src/main.tsx      # app shell, views, auth and API client
-│   ├── src/styles.css    # responsive dark UI
+│   ├── src/main.tsx       # app shell, views, auth and API client
+│   ├── src/markdown.tsx   # sanitized markdown rendering + asset links
+│   ├── src/styles.css     # responsive dark UI
 │   └── package.json
 ├── docker-compose.yml
 └── .github/workflows/ci.yml
@@ -42,6 +46,8 @@ uv run uvicorn app.main:app --reload --port 8000
 ```
 
 `uv sync` creates and manages the local `.venv` automatically. Add or update dependencies with `uv add <package>` and refresh the lockfile with `uv lock`.
+
+At startup the API reads the Markdown course tree under `backend/content/python-100-days/` and syncs it into the database (idempotent, single-transaction rebuild). To point at an alternative content location, set `COURSE_CONTENT_ROOT` to an absolute path before launch.
 
 ### Web
 
@@ -70,7 +76,9 @@ Login and register are rate-limited per client IP (5 attempts per minute) to slo
 ## API surface
 
 - `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/me`
-- `GET /api/courses`, `GET /api/courses/{id}`
+- `GET /api/courses` (summary list), `GET /api/courses/{id}` (course + lesson summaries)
+- `GET /api/lessons/{id}` (full lesson markdown + exercises + asset base URL + lesson links)
+- `GET /api/course-assets/{course_slug}/{path}` (serves images and other assets from a course's `res/` tree)
 - `GET /api/dashboard`, `POST /api/progress`
 - `POST /api/exercises/{id}/submit`
 - `POST /api/execute` (requires a signed-in user; 2 second timeout, 4 KB code limit for the demo runner)

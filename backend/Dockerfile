@@ -4,6 +4,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.11.26 /uv /uvx /bin/
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 COPY app ./app
+COPY content ./content
 RUN mkdir -p /app/data
 ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 8000
