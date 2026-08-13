@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .database import Base
 
@@ -26,7 +26,7 @@ class Course(Base):
     description: Mapped[str] = mapped_column(Text)
     level: Mapped[str] = mapped_column(String(30), default="Beginner")
     accent: Mapped[str] = mapped_column(String(20), default="cyan")
-    lessons: Mapped[list["Lesson"]] = relationship(back_populates="course", cascade="all, delete-orphan")
+    lessons: Mapped[list["Lesson"]] = relationship(back_populates="course", cascade="all, delete-orphan", order_by="Lesson.order")
 
 
 class Lesson(Base):
@@ -38,7 +38,7 @@ class Lesson(Base):
     duration: Mapped[int] = mapped_column(Integer, default=8)
     markdown: Mapped[str] = mapped_column(Text)
     course: Mapped[Course] = relationship(back_populates="lessons")
-    exercises: Mapped[list["Exercise"]] = relationship(back_populates="lesson", cascade="all, delete-orphan")
+    exercises: Mapped[list["Exercise"]] = relationship(back_populates="lesson", cascade="all, delete-orphan", order_by="Exercise.id")
 
 
 class Exercise(Base):
@@ -53,6 +53,7 @@ class Exercise(Base):
 
 class Progress(Base):
     __tablename__ = "progress"
+    __table_args__ = (UniqueConstraint("user_id", "lesson_id", name="uq_progress_user_lesson"),)
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     lesson_id: Mapped[int] = mapped_column(ForeignKey("lessons.id"))

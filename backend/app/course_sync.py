@@ -3,10 +3,17 @@ from __future__ import annotations
 import hashlib
 import math
 import os
+import posixpath
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
+from urllib.parse import unquote, urlsplit
+
+from sqlalchemy import delete, select
+from sqlalchemy.orm import Session, selectinload
+
+from .models import Course, Exercise, Lesson, Progress
 
 
 class ContentSyncError(RuntimeError):
@@ -48,6 +55,36 @@ class CourseManifest:
     spec: CourseSpec
     lessons: tuple[LessonRecord, ...]
     asset_digest: str
+
+
+@dataclass(frozen=True)
+class ContentIndex:
+    content_root: Path
+    course_order: dict[str, int]
+    course_assets: dict[str, Path]
+    lesson_sources: dict[int, str]
+    lesson_link_maps: dict[int, dict[str, int]]
+
+    def lesson_links(self, lesson_id: int) -> dict[str, int]:
+        return dict(self.lesson_link_maps.get(lesson_id, {}))
+
+    def lesson_source(self, lesson_id: int) -> str:
+        try:
+            return self.lesson_sources[lesson_id]
+        except KeyError as exc:
+            raise ContentSyncError(f"Unknown indexed lesson: {lesson_id}") from exc
+
+    def asset_root(self, slug: str) -> Path:
+        try:
+            return self.course_assets[slug]
+        except KeyError as exc:
+            raise ContentSyncError(f"Unknown indexed course: {slug}") from exc
+
+
+@dataclass(frozen=True)
+class SyncResult:
+    changed: bool
+    index: ContentIndex
 
 
 COURSE_SPECS = (
@@ -99,6 +136,7 @@ FOUNDATION_EXERCISES: tuple[tuple[ExerciseSeed, ...], ...] = (
 
 NUMBER_RE = re.compile(r"^(\d+)(?:[-.]|$)")
 TITLE_RE = re.compile(r"^\d+(?:-\d+)?\.(.+)\.md$", re.IGNORECASE)
+MARKDOWN_LINK_RE = re.compile(r"(?<!!)\[[^\]]*\]\((?:<([^>]+)>|([^\s)]+))")
 
 
 def resolve_content_root() -> Path:
@@ -182,3 +220,161 @@ def build_manifests(
         asset_files = tuple(path for path in resource_dir.rglob("*") if path.is_file())
         manifests.append(CourseManifest(spec, tuple(records), _digest_files(asset_files, resource_dir)))
     return tuple(manifests)
+
+
+def _course_rows(db: Session) -> list[Course]:
+    return list(
+        db.scalars(
+            select(Course).options(selectinload(Course.lessons).selectinload(Lesson.exercises))
+        ).unique()
+    )
+
+
+def manifest_matches(db: Session, manifests: tuple[CourseManifest, ...]) -> bool:
+    rows = _course_rows(db)
+    if {row.slug for row in rows} != {manifest.spec.slug for manifest in manifests}:
+        return False
+    by_slug = {row.slug: row for row in rows}
+    for manifest in manifests:
+        row = by_slug[manifest.spec.slug]
+        if (
+            row.title,
+            row.description,
+            row.level,
+            row.accent,
+        ) != (
+            manifest.spec.title,
+            manifest.spec.description,
+            manifest.spec.level,
+            manifest.spec.accent,
+        ):
+            return False
+        lessons = sorted(row.lessons, key=lambda lesson: lesson.order)
+        if len(lessons) != len(manifest.lessons):
+            return False
+        for lesson, expected in zip(lessons, manifest.lessons, strict=True):
+            if (
+                lesson.title,
+                lesson.order,
+                lesson.duration,
+                hashlib.sha256(lesson.markdown.encode("utf-8")).hexdigest(),
+            ) != (
+                expected.title,
+                expected.order,
+                expected.duration,
+                expected.markdown_digest,
+            ):
+                return False
+            exercises = sorted(lesson.exercises, key=lambda exercise: exercise.id)
+            actual_exercises = [
+                (exercise.prompt, exercise.starter_code, exercise.expected_answer)
+                for exercise in exercises
+            ]
+            expected_exercises = [
+                (exercise.prompt, exercise.starter_code, exercise.expected_answer)
+                for exercise in expected.exercises
+            ]
+            if actual_exercises != expected_exercises:
+                return False
+    return True
+
+
+def _normalized_lesson_target(source_path: str, target: str) -> str | None:
+    parsed = urlsplit(target)
+    if parsed.scheme or parsed.netloc or not parsed.path.lower().endswith(".md"):
+        return None
+    decoded = unquote(parsed.path).replace("\\", "/")
+    return posixpath.normpath(posixpath.join(posixpath.dirname(source_path), decoded))
+
+
+def _lesson_links(markdown: str, source_path: str, ids_by_source: dict[str, int]) -> dict[str, int]:
+    links: dict[str, int] = {}
+    for match in MARKDOWN_LINK_RE.finditer(markdown):
+        raw_target = match.group(1) or match.group(2)
+        normalized = _normalized_lesson_target(source_path, raw_target)
+        if normalized is not None and normalized in ids_by_source:
+            links[raw_target] = ids_by_source[normalized]
+    return links
+
+
+def content_index_from_db(
+    db: Session,
+    manifests: tuple[CourseManifest, ...],
+    content_root: Path,
+) -> ContentIndex:
+    courses = {course.slug: course for course in _course_rows(db)}
+    lesson_sources: dict[int, str] = {}
+    markdown_by_id: dict[int, str] = {}
+    ids_by_source: dict[str, int] = {}
+    for manifest in manifests:
+        course = courses.get(manifest.spec.slug)
+        if course is None:
+            raise ContentSyncError(f"Course missing after synchronization: {manifest.spec.slug}")
+        lessons_by_order = {lesson.order: lesson for lesson in course.lessons}
+        for record in manifest.lessons:
+            lesson = lessons_by_order.get(record.order)
+            if lesson is None:
+                raise ContentSyncError(f"Lesson missing after synchronization: {record.source_path}")
+            lesson_sources[lesson.id] = record.source_path
+            markdown_by_id[lesson.id] = record.markdown
+            ids_by_source[record.source_path] = lesson.id
+    link_maps = {
+        lesson_id: _lesson_links(markdown_by_id[lesson_id], source, ids_by_source)
+        for lesson_id, source in lesson_sources.items()
+    }
+    root = Path(content_root).resolve()
+    return ContentIndex(
+        content_root=root,
+        course_order={manifest.spec.slug: manifest.spec.order for manifest in manifests},
+        course_assets={manifest.spec.slug: root / manifest.spec.slug / "res" for manifest in manifests},
+        lesson_sources=lesson_sources,
+        lesson_link_maps=link_maps,
+    )
+
+
+def sync_courses(
+    db: Session,
+    content_root: Path | None = None,
+    specs: tuple[CourseSpec, ...] = COURSE_SPECS,
+) -> SyncResult:
+    root = Path(content_root or resolve_content_root()).resolve()
+    manifests = build_manifests(root, specs)
+    if manifest_matches(db, manifests):
+        return SyncResult(False, content_index_from_db(db, manifests, root))
+    try:
+        db.execute(delete(Progress))
+        db.execute(delete(Exercise))
+        db.execute(delete(Lesson))
+        db.execute(delete(Course))
+        db.flush()
+        for manifest in manifests:
+            course = Course(
+                title=manifest.spec.title,
+                slug=manifest.spec.slug,
+                description=manifest.spec.description,
+                level=manifest.spec.level,
+                accent=manifest.spec.accent,
+            )
+            for record in manifest.lessons:
+                lesson = Lesson(
+                    course=course,
+                    title=record.title,
+                    order=record.order,
+                    duration=record.duration,
+                    markdown=record.markdown,
+                )
+                lesson.exercises = [
+                    Exercise(
+                        lesson=lesson,
+                        prompt=seed.prompt,
+                        starter_code=seed.starter_code,
+                        expected_answer=seed.expected_answer,
+                    )
+                    for seed in record.exercises
+                ]
+            db.add(course)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return SyncResult(True, content_index_from_db(db, manifests, root))
