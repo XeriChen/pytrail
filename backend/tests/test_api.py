@@ -76,8 +76,39 @@ class ApiTests(unittest.TestCase):
         response = self.client.get("/api/courses")
         self.assertEqual(response.status_code, 200)
         courses = response.json()
-        self.assertGreater(len(courses), 0)
-        self.assertGreater(len(courses[0]["lessons"]), 0)
+        self.assertEqual(len(courses), 9)
+        self.assertEqual(sum(course["lesson_count"] for course in courses), 102)
+        self.assertNotIn("lessons", courses[0])
+        self.assertNotIn("markdown", courses[0])
+
+        detail = self.client.get(f"/api/courses/{courses[0]['id']}")
+        self.assertEqual(detail.status_code, 200)
+        lessons = detail.json()["lessons"]
+        self.assertEqual(len(lessons), 20)
+        self.assertNotIn("markdown", lessons[0])
+        self.assertTrue(lessons[0]["has_exercises"])
+
+        lesson = self.client.get(f"/api/lessons/{lessons[0]['id']}")
+        self.assertEqual(lesson.status_code, 200)
+        payload = lesson.json()
+        self.assertIn("初识Python", payload["markdown"])
+        self.assertEqual(payload["course_slug"], "python-foundations")
+        self.assertTrue(payload["asset_base_url"].endswith("/python-foundations/"))
+        self.assertTrue(payload["exercises"])
+
+    def test_catalog_errors_and_assets_are_safe(self) -> None:
+        self.assertEqual(self.client.get("/api/courses/999999").status_code, 404)
+        self.assertEqual(self.client.get("/api/lessons/999999").status_code, 404)
+        courses = self.client.get("/api/courses").json()
+        second = self.client.get(f"/api/courses/{courses[1]['id']}").json()
+        lesson = self.client.get(f"/api/lessons/{second['lessons'][0]['id']}").json()
+        self.assertEqual(lesson["exercises"], [])
+
+        asset = self.client.get("/api/course-assets/python-foundations/res/day01/tiobe_index.png")
+        self.assertEqual(asset.status_code, 200)
+        self.assertEqual(asset.headers["content-type"], "image/png")
+        self.assertEqual(self.client.get("/api/course-assets/not-a-course/res/a.png").status_code, 404)
+        self.assertEqual(self.client.get("/api/course-assets/python-foundations/%2E%2E/01.%E5%88%9D%E8%AF%86Python.md").status_code, 404)
 
     def test_execute_requires_auth(self) -> None:
         response = self.client.post("/api/execute", json={"code": "print(1)"})
@@ -142,7 +173,7 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(empty_body["completion"], 0)
 
         courses = self.client.get("/api/courses").json()
-        lessons = courses[0]["lessons"]
+        lessons = self.client.get(f"/api/courses/{courses[0]['id']}").json()["lessons"]
         self.assertGreaterEqual(len(lessons), 2)
         first_id = lessons[0]["id"]
         second_id = lessons[1]["id"]

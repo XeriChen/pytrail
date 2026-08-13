@@ -32,25 +32,37 @@ class ExerciseOut(BaseModel):
     starter_code: str
 
 
-class LessonOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+class LessonSummaryOut(BaseModel):
     id: int
     title: str
     order: int
     duration: int
-    markdown: str
-    exercises: list[ExerciseOut] = []
+    has_exercises: bool
 
 
-class CourseOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+class CourseSummaryOut(BaseModel):
     id: int
-    title: str
     slug: str
+    title: str
     description: str
     level: str
     accent: str
-    lessons: list[LessonOut] = []
+    lesson_count: int
+    total_duration: int
+
+
+class CourseDetailOut(CourseSummaryOut):
+    lessons: list[LessonSummaryOut]
+
+
+class LessonDetailOut(LessonSummaryOut):
+    course_id: int
+    course_slug: str
+    markdown: str
+    exercises: list[ExerciseOut]
+    asset_base_url: str
+    lesson_links: dict[str, int]
+
 
 
 class ProgressIn(BaseModel):
