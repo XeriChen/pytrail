@@ -70,18 +70,17 @@ Programming exercise manifests live in `backend/content/practice/<course-slug>.j
 - function names and difficulty values are valid;
 - case payloads are JSON-safe and bounded in size.
 
-`Lesson` gains a stable `source_path`. Course synchronization changes from full deletion/recreation to ID-preserving upsert:
+`Lesson` gains `source_path` so manifests can map every function exercise to an exact chapter before any database write. This release has no production users or data-retention requirement, so it deliberately uses a fresh schema rather than carrying a legacy migration layer.
 
-1. Courses match by `slug`.
-2. Lessons match by `(course, source_path)`; legacy rows may match once by course and order during migration.
-3. Exercises match by stable `slug`.
-4. Existing rows are updated in place, new rows are inserted, and only manifest-owned stale rows are removed.
-5. User, lesson progress, and exercise progress for unchanged stable rows are preserved.
-6. Validation completes before database writes, and all writes remain transactional.
+Synchronization retains the existing simple rebuild model:
 
-This supersedes the previous permission to reset course progress after a content digest change. A content edit must no longer erase learning history.
+1. Build and validate the complete course and practice manifests in memory.
+2. If the stored catalog exactly matches, perform no database writes.
+3. If content differs, delete lesson progress, exercise progress, exercise associations/cases/tags, exercises, lessons, and courses in dependency order.
+4. Recreate the complete validated catalog in one transaction while preserving `User` rows.
+5. Roll back the whole rebuild on any failure.
 
-The database upgrade is versioned and idempotent. It adds columns and tables before the first sync and supports both SQLite and PostgreSQL. Existing quick checks are assigned deterministic slugs without changing their public IDs or current API behavior.
+Changing course Markdown or exercise manifests therefore clears learning progress and may change database IDs. Stable exercise slugs remain the public URL contract. Deployment starts from a newly created database; no compatibility code for the previous schema is retained.
 
 ## Curated Exercise Distribution
 
@@ -216,7 +215,7 @@ Course reading progress and exercise practice progress remain independent. A fai
 - Filter values are validated enums/IDs and queries are parameterized through SQLAlchemy.
 - Code execution is authenticated, rate-limited, size-limited, time-limited, and restricted to the function runtime.
 - Progress update is server-derived from actual public-case results; clients cannot post a passed status directly.
-- A passed status is monotonic and survives course content refreshes.
+- A passed status is monotonic during the lifetime of the current content manifest. A deliberate content rebuild clears it with the rest of learning progress.
 
 ## Testing and Acceptance
 
@@ -224,7 +223,7 @@ Backend tests must prove:
 
 - all nine manifests load exactly 36 function exercises with four per course and valid lesson mappings;
 - quick-check API behavior remains compatible and excludes function exercises;
-- sync is idempotent and preserves course IDs, lesson IDs, exercise IDs, lesson progress, and exercise progress after Markdown or exercise content changes;
+- an unchanged sync is idempotent, while a Markdown or exercise change atomically rebuilds catalog data, clears both progress tables, and preserves users;
 - list search, filters, status filtering, curriculum ordering, pagination, anonymous responses, and optional authenticated status work;
 - detail exposes only public fields and resumes saved code;
 - run requires authentication, increments attempts, stores last code, marks all-public-cases success, records in-progress failure, and never downgrades passed status;
@@ -265,12 +264,12 @@ Manual browser acceptance covers light and dark themes at 1440x900 and 390x844: 
 
 - `backend/app/models.py`: extended exercise fields, cases, tags, progress, and stable lesson source key.
 - `backend/app/schemas.py`: practice summaries, details, filters, run results, and progress responses.
-- `backend/app/course_sync.py`: manifest loading/validation and ID-preserving upsert.
+- `backend/app/course_sync.py`: manifest loading/validation and transactional full catalog rebuild.
 - `backend/app/practice.py`: catalog/detail queries and progress orchestration.
 - `backend/app/practice_runner.py`: restricted function compilation and child-process execution.
 - `backend/app/main.py`: practice endpoints and dependency wiring.
 - `backend/content/practice/*.json`: nine curated exercise manifests.
-- `backend/tests/`: manifest, sync preservation, API, progress, and runner coverage.
+- `backend/tests/`: manifest, transactional rebuild, API, progress, and runner coverage.
 - `frontend/src/practice/`: catalog, filters, workspace, editor, result panel, types, and API state.
 - `frontend/src/main.tsx`: navigation integration, authentication handoff, and related-practice links.
 - `frontend/src/i18n.ts`: bilingual practice chrome, tags, statuses, and errors.

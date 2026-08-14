@@ -15,6 +15,7 @@
 - Function arguments and return values must be JSON-safe; use only public examples and standard-library concepts.
 - Browsing is public; running and progress require authentication.
 - Persist only current status, attempts, last code, and update time; do not add submission history.
+- Use a fresh database schema; a changed course or exercise manifest atomically rebuilds catalog tables and clears both progress tables while preserving users.
 - A passed exercise never returns to in-progress after a later failed run.
 - Imports, files, network, processes, dynamic evaluation, and application secrets are unavailable to learner code.
 - All new interface icons come from Lucide; no emoji or handwritten UI SVG.
@@ -23,45 +24,18 @@
 
 ---
 
-### Task 1: Add Versioned Practice Schema
+### Task 1: Add the Fresh Practice Schema
 
 **Files:**
-- Create: `backend/app/schema_migrations.py`
-- Create: `backend/tests/test_schema_migrations.py`
 - Modify: `backend/app/models.py`
 - Modify: `backend/app/main.py`
+- Test: `backend/tests/test_api.py`
 
 **Interfaces:**
-- Produces: `upgrade_schema(engine: Engine) -> None`, invoked before startup sync.
 - Produces: `Lesson.source_path`, extended `Exercise`, `ExerciseCase`, `Tag`, `exercise_tags`, and `ExerciseProgress` ORM mappings.
-- Consumes: existing `Base`, `engine`, and SQLAlchemy metadata.
+- Consumes: existing `Base.metadata.create_all` on a new SQLite or PostgreSQL database.
 
-- [ ] **Step 1: Write migration and model tests**
-
-Create a legacy SQLite schema from the pre-feature table definitions, insert a user/course/lesson/quick-check/progress row, call `upgrade_schema`, then assert the original IDs/data remain and the following columns/tables exist:
-
-```python
-def test_upgrade_adds_practice_schema_without_losing_legacy_rows(self):
-    upgrade_schema(self.engine)
-    columns = {item["name"] for item in inspect(self.engine).get_columns("exercises")}
-    self.assertTrue({"slug", "kind", "title", "difficulty", "function_name", "signature_json", "order"} <= columns)
-    self.assertTrue({"exercise_cases", "tags", "exercise_tags", "exercise_progress", "schema_migrations"} <= set(inspect(self.engine).get_table_names()))
-    self.assertEqual(self.connection.scalar(text("select count(*) from users")), 1)
-    self.assertEqual(self.connection.scalar(text("select count(*) from progress")), 1)
-
-def test_upgrade_is_idempotent(self):
-    upgrade_schema(self.engine)
-    upgrade_schema(self.engine)
-    self.assertEqual(self.connection.scalar(text("select count(*) from schema_migrations")), 1)
-```
-
-- [ ] **Step 2: Run the migration tests and verify failure**
-
-Run: `cd backend; uv run python -m unittest tests.test_schema_migrations -v`
-
-Expected: FAIL because the migration module and practice model fields do not exist.
-
-- [ ] **Step 3: Extend the SQLAlchemy model graph**
+- [ ] **Step 1: Extend the SQLAlchemy model graph**
 
 Add mappings with these exact boundaries:
 
@@ -106,45 +80,19 @@ class ExerciseProgress(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 ```
 
-Add `Lesson.source_path`, bidirectional relationships, `Tag(slug, label_zh, label_en)`, and the `exercise_tags` association table. Use cascade delete-orphan for cases and exercise progress only when the owning stable exercise is intentionally removed.
+Add `Lesson.source_path`, bidirectional relationships, `Tag(slug, label_zh, label_en)`, and the `exercise_tags` association table. Keep `Base.metadata.create_all` in the application lifespan. Start development and deployment with a newly created database; do not add legacy column detection, `ALTER TABLE`, schema-version tables, or data-copy code.
 
-- [ ] **Step 4: Implement the idempotent schema upgrader**
+- [ ] **Step 2: Run existing backend tests on a fresh temporary database**
 
-Create `schema_migrations` through SQLAlchemy, inspect columns before each additive `ALTER TABLE`, render column DDL with SQLAlchemy's active dialect, then create indexes/tables with `checkfirst=True`. Record migration version `1` only after success:
+Run: `cd backend; uv run python -m unittest tests.test_api -v`
 
-```python
-PRACTICE_SCHEMA_VERSION = 1
+Expected: all existing API tests PASS with SQLAlchemy creating the new schema from metadata.
 
-def upgrade_schema(engine: Engine) -> None:
-    Base.metadata.create_all(engine)
-    with engine.begin() as connection:
-        applied = set(connection.scalars(text("select version from schema_migrations")))
-        if PRACTICE_SCHEMA_VERSION in applied:
-            return
-        add_column_if_missing(connection, "lessons", Column("source_path", String(512), nullable=True))
-        add_column_if_missing(connection, "exercises", Column("slug", String(180), nullable=True))
-        add_column_if_missing(connection, "exercises", Column("kind", String(24), nullable=False, server_default="quick_check"))
-        add_column_if_missing(connection, "exercises", Column("title", String(180), nullable=False, server_default=""))
-        add_column_if_missing(connection, "exercises", Column("difficulty", String(20), nullable=True))
-        add_column_if_missing(connection, "exercises", Column("function_name", String(80), nullable=True))
-        add_column_if_missing(connection, "exercises", Column("signature_json", Text, nullable=False, server_default="{}"))
-        add_column_if_missing(connection, "exercises", Column("order", Integer, nullable=False, server_default="1"))
-        connection.execute(insert(schema_migrations).values(version=PRACTICE_SCHEMA_VERSION))
-```
-
-Call `upgrade_schema(engine)` at the start of the FastAPI lifespan before `sync_courses`.
-
-- [ ] **Step 5: Run focused and existing backend tests**
-
-Run: `cd backend; uv run python -m unittest tests.test_schema_migrations tests.test_api -v`
-
-Expected: migration tests PASS and existing API tests remain PASS.
-
-- [ ] **Step 6: Commit schema work**
+- [ ] **Step 3: Commit schema work**
 
 ```text
-git add backend/app/models.py backend/app/schema_migrations.py backend/app/main.py backend/tests/test_schema_migrations.py
-git commit -m "feat: add versioned practice schema"
+git add backend/app/models.py backend/app/main.py
+git commit -m "feat: add fresh practice schema"
 ```
 
 ### Task 2: Define and Validate 36 Curriculum Exercises
@@ -253,7 +201,7 @@ git add backend/app/practice_manifest.py backend/content/practice backend/tests/
 git commit -m "feat: add curriculum-linked practice manifests"
 ```
 
-### Task 3: Replace Destructive Course Sync With Stable Upsert
+### Task 3: Integrate Practice Manifests Into Transactional Rebuild
 
 **Files:**
 - Modify: `backend/app/course_sync.py`
@@ -261,55 +209,52 @@ git commit -m "feat: add curriculum-linked practice manifests"
 
 **Interfaces:**
 - Consumes: `load_practice_manifests` and stable exercise seeds from Task 2.
-- Produces: `sync_courses(..., practice_root: Path | None = None) -> SyncResult` that preserves unchanged row IDs and progress.
+- Produces: `sync_courses(..., practice_root: Path | None = None) -> SyncResult` that performs no writes for an unchanged manifest and atomically rebuilds course data for a changed manifest.
 
-- [ ] **Step 1: Replace destructive-sync assertions with preservation assertions**
+- [ ] **Step 1: Add function-exercise rebuild assertions**
 
-Update the changed-Markdown test and add exercise-content coverage:
+Update sync tests to prove function exercises are imported and progress is deliberately cleared after a content change:
 
 ```python
-def test_changed_markdown_updates_in_place_and_preserves_progress(self):
+def test_changed_markdown_rebuilds_catalog_and_clears_learning_progress(self):
     user = self._add_user()
     sync_courses(self.db, self.root, self.specs, self.practice_root)
     lesson = self.db.scalar(select(Lesson).order_by(Lesson.id))
-    original_id = lesson.id
     self.db.add(Progress(user_id=user.id, lesson_id=lesson.id, completed=True, score=80))
     self.db.commit()
     self._append_markdown("fixture-one", "01.第一课.md", "内容变化。")
     sync_courses(self.db, self.root, self.specs, self.practice_root)
-    self.assertEqual(self.db.scalar(select(Lesson.id).where(Lesson.source_path == "Day01-20/01.第一课.md")), original_id)
-    self.assertEqual(self.db.scalar(select(func.count(Progress.id))), 1)
+    self.assertEqual(self.db.scalar(select(func.count(Progress.id))), 0)
+    self.assertIsNotNone(self.db.get(User, user.id))
 ```
 
-Add tests proving exercise ID and `ExerciseProgress` survive prompt/case updates, quick checks receive stable slugs, removed manifest exercises alone are deleted, rollback preserves the prior graph, and lesson detail quick-check ordering stays stable.
+Add tests proving there are exactly four function exercises per fixture course, cases/tags/signatures are stored, an exercise-manifest change clears `ExerciseProgress`, all quick checks receive deterministic slugs, unchanged second sync performs no writes, users survive rebuilds, and a forced flush failure rolls the complete rebuild back.
 
-- [ ] **Step 2: Run sync tests and verify the destructive behavior fails them**
+- [ ] **Step 2: Run sync tests and verify practice content is absent**
 
 Run: `cd backend; uv run python -m unittest tests.test_course_sync -v`
 
-Expected: FAIL because the current mismatch path deletes every course, lesson, exercise, and progress row.
+Expected: FAIL because the current synchronizer does not load practice manifests or child records.
 
 - [ ] **Step 3: Merge practice seeds into lesson records**
 
-Extend `ExerciseSeed` with kind/title/slug/function metadata/cases/tags while preserving `_exercise(...)` as a quick-check constructor. Build stable quick-check slugs from course slug, lesson source path, and one-based position. Include practice manifest digests in `manifest_matches` so a changed prompt or case triggers an upsert.
+Extend `ExerciseSeed` with kind/title/slug/function metadata/cases/tags while preserving `_exercise(...)` as a quick-check constructor. Build deterministic quick-check slugs from course slug, lesson source path, and one-based position. Merge validated practice seeds into each `LessonRecord` and include cases/tags/signatures in `manifest_matches` so a changed prompt or case triggers a rebuild.
 
-- [ ] **Step 4: Implement transactional upsert helpers**
+- [ ] **Step 4: Rebuild child tables in dependency order**
 
-Use four focused helpers with exact signatures: `upsert_course(db: Session, manifest: CourseManifest) -> Course`, `upsert_lesson(db: Session, course: Course, record: LessonRecord) -> Lesson`, `upsert_exercise(db: Session, lesson: Lesson, seed: ExerciseSeed, order: int) -> Exercise`, and `replace_cases_and_tags(db: Session, exercise: Exercise, seed: ExerciseSeed) -> None`.
-
-Load existing courses by slug, lessons by source path, and exercises by slug. For legacy lessons with empty `source_path`, allow a single `(course, order)` migration match. Flush IDs before cases/tags. Delete only stale manifest-owned exercises, lessons, and courses after upserts, relying on explicit relationship cleanup for records that truly disappeared. Keep one outer transaction and rollback on every exception.
+On a manifest mismatch, delete `Progress`, `ExerciseProgress`, `exercise_tags`, `ExerciseCase`, `Exercise`, `Tag`, `Lesson`, and `Course` rows in that order. Recreate courses, lessons, exercises, cases, and shared tags from the already validated in-memory manifests. Preserve `User` rows. Keep one outer transaction and rollback on every exception.
 
 - [ ] **Step 5: Run sync and API regression tests**
 
 Run: `cd backend; uv run python -m unittest tests.test_course_sync tests.test_api -v`
 
-Expected: all tests PASS; content edits preserve stable IDs and progress.
+Expected: all tests PASS; unchanged sync is idempotent and changed content clears learning progress without deleting users.
 
-- [ ] **Step 6: Commit stable synchronization**
+- [ ] **Step 6: Commit practice synchronization**
 
 ```text
 git add backend/app/course_sync.py backend/tests/test_course_sync.py
-git commit -m "fix: preserve progress during curriculum sync"
+git commit -m "feat: sync practice exercises with curriculum"
 ```
 
 ### Task 4: Implement Restricted Function Execution
@@ -669,7 +614,7 @@ Add the count-aware command near lesson navigation rather than inside the quick-
 
 - [ ] **Step 3: Package and document runtime behavior**
 
-Verify the existing `COPY content ./content` Docker instruction includes `backend/content/practice`. Document the three practice endpoints, 36-question mapping, login boundary, restricted Python subset, two-second/12,000-character limits, rate limit, no hidden tests/history, and the schema-upgrade/startup sequence. The restricted child process remains inside the API service, so Compose gains no extra service or network.
+Verify the existing `COPY content ./content` Docker instruction includes `backend/content/practice`. Document the three practice endpoints, 36-question mapping, login boundary, restricted Python subset, two-second/12,000-character limits, rate limit, no hidden tests/history, fresh-database requirement, and progress reset on content rebuild. The restricted child process remains inside the API service, so Compose gains no extra service or network.
 
 - [ ] **Step 4: Run complete automated verification**
 
