@@ -108,14 +108,24 @@ def course_detail(course_id: int, db: Session = Depends(get_db)):
             Lesson.order,
             Lesson.duration,
         ),
-        selectinload(Lesson.exercises).load_only(Exercise.id, Exercise.lesson_id),
+        selectinload(Lesson.exercises).load_only(Exercise.id, Exercise.lesson_id, Exercise.kind),
     )
     course = db.scalar(
         select(Course).where(Course.id == course_id).options(lesson_summaries)
     )
     if not course:
         raise HTTPException(404, "Course not found")
-    lessons = [LessonSummaryOut(id=lesson.id, title=lesson.title, order=lesson.order, duration=lesson.duration, has_exercises=bool(lesson.exercises)) for lesson in sorted(course.lessons, key=lambda item: item.order)]
+    lessons = [
+        LessonSummaryOut(
+            id=lesson.id,
+            title=lesson.title,
+            order=lesson.order,
+            duration=lesson.duration,
+            has_exercises=any(item.kind == "quick_check" for item in lesson.exercises),
+            practice_count=sum(item.kind == "function" for item in lesson.exercises),
+        )
+        for lesson in sorted(course.lessons, key=lambda item: item.order)
+    ]
     return CourseDetailOut(id=course.id, slug=course.slug, title=course.title, description=course.description, level=course.level, accent=course.accent, lesson_count=len(lessons), total_duration=sum(item.duration for item in lessons), lessons=lessons)
 
 
@@ -126,7 +136,8 @@ def lesson_detail(lesson_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404, "Lesson not found")
     index = getattr(app.state, "content_index", None)
     links = index.lesson_links(lesson.id) if index else {}
-    return LessonDetailOut(id=lesson.id, title=lesson.title, order=lesson.order, duration=lesson.duration, has_exercises=bool(lesson.exercises), course_id=lesson.course_id, course_slug=lesson.course.slug, markdown=lesson.markdown, exercises=[ExerciseOut.model_validate(item) for item in lesson.exercises], asset_base_url=f"/api/course-assets/{lesson.course.slug}/", lesson_links=links)
+    quick_checks = [item for item in lesson.exercises if item.kind == "quick_check"]
+    return LessonDetailOut(id=lesson.id, title=lesson.title, order=lesson.order, duration=lesson.duration, has_exercises=bool(quick_checks), practice_count=sum(item.kind == "function" for item in lesson.exercises), course_id=lesson.course_id, course_slug=lesson.course.slug, markdown=lesson.markdown, exercises=[ExerciseOut.model_validate(item) for item in quick_checks], asset_base_url=f"/api/course-assets/{lesson.course.slug}/", lesson_links=links)
 
 
 @app.get("/api/course-assets/{course_slug}/{asset_path:path}")

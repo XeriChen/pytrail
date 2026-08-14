@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 import os
 import posixpath
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Iterable
 from urllib.parse import unquote, urlsplit
@@ -13,7 +14,14 @@ from urllib.parse import unquote, urlsplit
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, selectinload
 
-from .models import Course, Exercise, Lesson, Progress
+from .models import Course, Exercise, ExerciseCase, ExerciseProgress, Lesson, Progress, Tag, exercise_tags
+from .practice_manifest import (
+    PracticeCaseSeed,
+    PracticeExerciseSeed,
+    PracticeManifestError,
+    default_practice_root,
+    load_practice_manifests,
+)
 
 
 class ContentSyncError(RuntimeError):
@@ -24,7 +32,15 @@ class ContentSyncError(RuntimeError):
 class ExerciseSeed:
     prompt: str
     starter_code: str
-    expected_answer: str
+    expected_answer: str = ""
+    slug: str = ""
+    kind: str = "quick_check"
+    title: str = ""
+    difficulty: str | None = None
+    function_name: str | None = None
+    signature_json: str = "{}"
+    tags: tuple[str, ...] = ()
+    cases: tuple[PracticeCaseSeed, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -104,6 +120,37 @@ def _exercise(prompt: str, starter_code: str, expected_answer: str) -> ExerciseS
     return ExerciseSeed(prompt, starter_code, expected_answer)
 
 
+def _canonical_json(value: object) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _quick_check_slug(course_slug: str, source_path: str, position: int) -> str:
+    digest = hashlib.sha256(source_path.encode("utf-8")).hexdigest()[:12]
+    return f"quick-{course_slug}-{digest}-{position}"
+
+
+def _programming_seed(seed: PracticeExerciseSeed) -> ExerciseSeed:
+    signature = {
+        "parameters": [
+            {"name": parameter.name, "type": parameter.type}
+            for parameter in seed.signature.parameters
+        ],
+        "returns": seed.signature.returns,
+    }
+    return ExerciseSeed(
+        prompt=seed.prompt,
+        starter_code=seed.starter_code,
+        slug=seed.slug,
+        kind="function",
+        title=seed.title,
+        difficulty=seed.difficulty,
+        function_name=seed.function_name,
+        signature_json=_canonical_json(signature),
+        tags=seed.tags,
+        cases=seed.cases,
+    )
+
+
 FOUNDATION_EXERCISES: tuple[tuple[ExerciseSeed, ...], ...] = (
     (_exercise("Which command prints the Python interpreter version?", "# Run this in a terminal, not in Python:\n# python --version\n\nprint('Python is ready')", "python"),),
     (_exercise("Which built-in function writes text to the screen?", "print('hello, world')\nprint('goodbye, world')", "print"),),
@@ -178,6 +225,7 @@ def _digest_files(paths: Iterable[Path], root: Path) -> str:
 def build_manifests(
     content_root: Path,
     specs: tuple[CourseSpec, ...] = COURSE_SPECS,
+    practice_root: Path | None = None,
 ) -> tuple[CourseManifest, ...]:
     root = Path(content_root).resolve()
     manifests: list[CourseManifest] = []
@@ -204,10 +252,15 @@ def build_manifests(
                 markdown = raw.decode("utf-8")
             except UnicodeDecodeError as exc:
                 raise ContentSyncError(f"Invalid UTF-8 Markdown for {spec.slug}: {path}") from exc
-            exercises = FOUNDATION_EXERCISES[sequence - 1] if spec.slug == "python-foundations" and sequence <= len(FOUNDATION_EXERCISES) else ()
+            source_path = f"{spec.source_dir}/{path.name}"
+            quick_checks = FOUNDATION_EXERCISES[sequence - 1] if spec.slug == "python-foundations" and sequence <= len(FOUNDATION_EXERCISES) else ()
+            exercises = tuple(
+                replace(seed, slug=_quick_check_slug(spec.slug, source_path, position))
+                for position, seed in enumerate(quick_checks, start=1)
+            )
             records.append(
                 LessonRecord(
-                    source_path=f"{spec.source_dir}/{path.name}",
+                    source_path=source_path,
                     filename=path.name,
                     title=_title_from_path(path),
                     order=sequence,
@@ -219,14 +272,103 @@ def build_manifests(
             )
         asset_files = tuple(path for path in resource_dir.rglob("*") if path.is_file())
         manifests.append(CourseManifest(spec, tuple(records), _digest_files(asset_files, resource_dir)))
+
+    resolved_practice_root = practice_root
+    if resolved_practice_root is None and tuple(specs) == COURSE_SPECS:
+        resolved_practice_root = default_practice_root()
+    if resolved_practice_root is not None:
+        lesson_sources = {
+            manifest.spec.slug: {record.source_path for record in manifest.lessons}
+            for manifest in manifests
+        }
+        try:
+            programming = load_practice_manifests(
+                resolved_practice_root,
+                lesson_sources,
+                tuple(manifest.spec.slug for manifest in manifests),
+            )
+        except PracticeManifestError as exc:
+            raise ContentSyncError(str(exc)) from exc
+        merged: list[CourseManifest] = []
+        for manifest in manifests:
+            by_source: dict[str, list[ExerciseSeed]] = {}
+            for seed in programming[manifest.spec.slug]:
+                by_source.setdefault(seed.lesson_source_path, []).append(_programming_seed(seed))
+            lessons = tuple(
+                replace(record, exercises=record.exercises + tuple(by_source.get(record.source_path, ())))
+                for record in manifest.lessons
+            )
+            merged.append(replace(manifest, lessons=lessons))
+        manifests = merged
     return tuple(manifests)
 
 
 def _course_rows(db: Session) -> list[Course]:
     return list(
         db.scalars(
-            select(Course).options(selectinload(Course.lessons).selectinload(Lesson.exercises))
+            select(Course).options(
+                selectinload(Course.lessons).selectinload(Lesson.exercises).selectinload(Exercise.cases),
+                selectinload(Course.lessons).selectinload(Lesson.exercises).selectinload(Exercise.tags),
+            )
         ).unique()
+    )
+
+
+def _case_seed_state(seed: PracticeCaseSeed, order: int) -> tuple[object, ...]:
+    return (
+        order,
+        _canonical_json(list(seed.args)),
+        _canonical_json(seed.kwargs),
+        _canonical_json(seed.expected),
+        seed.explanation,
+        seed.comparison,
+        seed.tolerance,
+    )
+
+
+def _case_row_state(row: ExerciseCase) -> tuple[object, ...]:
+    return (
+        row.order,
+        row.args_json,
+        row.kwargs_json,
+        row.expected_json,
+        row.explanation,
+        row.comparison,
+        row.tolerance,
+    )
+
+
+def _exercise_seed_state(seed: ExerciseSeed, order: int) -> tuple[object, ...]:
+    return (
+        seed.slug,
+        seed.kind,
+        seed.title,
+        seed.difficulty,
+        seed.function_name,
+        seed.signature_json,
+        order,
+        seed.prompt,
+        seed.starter_code,
+        seed.expected_answer,
+        tuple(sorted(seed.tags)),
+        tuple(_case_seed_state(case, position) for position, case in enumerate(seed.cases, start=1)),
+    )
+
+
+def _exercise_row_state(row: Exercise) -> tuple[object, ...]:
+    return (
+        row.slug,
+        row.kind,
+        row.title,
+        row.difficulty,
+        row.function_name,
+        row.signature_json,
+        row.order,
+        row.prompt,
+        row.starter_code,
+        row.expected_answer,
+        tuple(sorted(tag.slug for tag in row.tags)),
+        tuple(_case_row_state(case) for case in sorted(row.cases, key=lambda item: item.order)),
     )
 
 
@@ -254,25 +396,24 @@ def manifest_matches(db: Session, manifests: tuple[CourseManifest, ...]) -> bool
             return False
         for lesson, expected in zip(lessons, manifest.lessons, strict=True):
             if (
+                lesson.source_path,
                 lesson.title,
                 lesson.order,
                 lesson.duration,
                 hashlib.sha256(lesson.markdown.encode("utf-8")).hexdigest(),
             ) != (
+                expected.source_path,
                 expected.title,
                 expected.order,
                 expected.duration,
                 expected.markdown_digest,
             ):
                 return False
-            exercises = sorted(lesson.exercises, key=lambda exercise: exercise.id)
-            actual_exercises = [
-                (exercise.prompt, exercise.starter_code, exercise.expected_answer)
-                for exercise in exercises
-            ]
+            exercises = sorted(lesson.exercises, key=lambda exercise: exercise.order)
+            actual_exercises = [_exercise_row_state(exercise) for exercise in exercises]
             expected_exercises = [
-                (exercise.prompt, exercise.starter_code, exercise.expected_answer)
-                for exercise in expected.exercises
+                _exercise_seed_state(exercise, order)
+                for order, exercise in enumerate(expected.exercises, start=1)
             ]
             if actual_exercises != expected_exercises:
                 return False
@@ -310,9 +451,9 @@ def content_index_from_db(
         course = courses.get(manifest.spec.slug)
         if course is None:
             raise ContentSyncError(f"Course missing after synchronization: {manifest.spec.slug}")
-        lessons_by_order = {lesson.order: lesson for lesson in course.lessons}
+        lessons_by_source = {lesson.source_path: lesson for lesson in course.lessons}
         for record in manifest.lessons:
-            lesson = lessons_by_order.get(record.order)
+            lesson = lessons_by_source.get(record.source_path)
             if lesson is None:
                 raise ContentSyncError(f"Lesson missing after synchronization: {record.source_path}")
             lesson_sources[lesson.id] = record.source_path
@@ -336,17 +477,23 @@ def sync_courses(
     db: Session,
     content_root: Path | None = None,
     specs: tuple[CourseSpec, ...] = COURSE_SPECS,
+    practice_root: Path | None = None,
 ) -> SyncResult:
     root = Path(content_root or resolve_content_root()).resolve()
-    manifests = build_manifests(root, specs)
+    manifests = build_manifests(root, specs, practice_root)
     if manifest_matches(db, manifests):
         return SyncResult(False, content_index_from_db(db, manifests, root))
     try:
         db.execute(delete(Progress))
+        db.execute(delete(ExerciseProgress))
+        db.execute(delete(exercise_tags))
+        db.execute(delete(ExerciseCase))
         db.execute(delete(Exercise))
+        db.execute(delete(Tag))
         db.execute(delete(Lesson))
         db.execute(delete(Course))
         db.flush()
+        tags: dict[str, Tag] = {}
         for manifest in manifests:
             course = Course(
                 title=manifest.spec.title,
@@ -358,21 +505,52 @@ def sync_courses(
             for record in manifest.lessons:
                 lesson = Lesson(
                     course=course,
+                    source_path=record.source_path,
                     title=record.title,
                     order=record.order,
                     duration=record.duration,
                     markdown=record.markdown,
                 )
-                lesson.exercises = [
-                    Exercise(
+                lesson.exercises = []
+                for order, seed in enumerate(record.exercises, start=1):
+                    exercise = Exercise(
                         lesson=lesson,
+                        slug=seed.slug,
+                        kind=seed.kind,
+                        title=seed.title,
+                        difficulty=seed.difficulty,
+                        function_name=seed.function_name,
+                        signature_json=seed.signature_json,
+                        order=order,
                         prompt=seed.prompt,
                         starter_code=seed.starter_code,
                         expected_answer=seed.expected_answer,
                     )
-                    for seed in record.exercises
-                ]
+                    exercise.cases = [
+                        ExerciseCase(
+                            order=position,
+                            args_json=_canonical_json(list(case.args)),
+                            kwargs_json=_canonical_json(case.kwargs),
+                            expected_json=_canonical_json(case.expected),
+                            explanation=case.explanation,
+                            comparison=case.comparison,
+                            tolerance=case.tolerance,
+                        )
+                        for position, case in enumerate(seed.cases, start=1)
+                    ]
+                    for tag_slug in seed.tags:
+                        tag = tags.get(tag_slug)
+                        if tag is None:
+                            tag = Tag(
+                                slug=tag_slug,
+                                label_zh=tag_slug,
+                                label_en=tag_slug.replace("-", " ").title(),
+                            )
+                            tags[tag_slug] = tag
+                        exercise.tags.append(tag)
+                    lesson.exercises.append(exercise)
             db.add(course)
+        db.flush()
         db.commit()
     except Exception:
         db.rollback()

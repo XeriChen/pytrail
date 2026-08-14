@@ -38,6 +38,7 @@ class LessonSummaryOut(BaseModel):
     order: int
     duration: int
     has_exercises: bool
+    practice_count: int = 0
 
 
 class CourseSummaryOut(BaseModel):

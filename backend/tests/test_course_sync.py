@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+import json
 import shutil
 import tempfile
 from pathlib import Path
@@ -17,7 +18,7 @@ from app.course_sync import (
     sync_courses,
 )
 from app.database import Base
-from app.models import Course, Lesson, Progress, User
+from app.models import Course, Exercise, ExerciseCase, ExerciseProgress, Lesson, Progress, User
 
 
 CONTENT_ROOT = Path(__file__).resolve().parents[1] / "content" / "python-100-days"
@@ -48,8 +49,13 @@ class CourseManifestTests(unittest.TestCase):
         self.assertTrue(all(5 <= lesson.duration <= 90 for lesson in lessons))
         self.assertIn("初识Python", self.manifests[0].lessons[0].markdown.splitlines()[0])
         self.assertTrue(all(len(course.asset_digest) == 64 for course in self.manifests))
-        self.assertEqual(sum(len(lesson.exercises) for lesson in lessons), 22)
-        self.assertTrue(all(not lesson.exercises for course in self.manifests[1:] for lesson in course.lessons))
+        exercises = [exercise for lesson in lessons for exercise in lesson.exercises]
+        self.assertEqual(sum(exercise.kind == "quick_check" for exercise in exercises), 22)
+        self.assertEqual(sum(exercise.kind == "function" for exercise in exercises), 36)
+        self.assertTrue(all(
+            sum(exercise.kind == "function" for lesson in course.lessons for exercise in lesson.exercises) == 4
+            for course in self.manifests
+        ))
         self.assertFalse(any((CONTENT_ROOT / spec.slug / "code").exists() for spec in COURSE_SPECS))
 
     def test_reading_duration_clamps_to_bounds(self) -> None:
@@ -63,12 +69,16 @@ class CourseSyncTests(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.root = Path(self.temp_dir.name) / "content"
         self.root.mkdir()
+        self.practice_root = Path(self.temp_dir.name) / "practice"
+        self.practice_root.mkdir()
         self.specs = (
             CourseSpec("fixture-one", "Day01-20", "Fixture One", "First", "beginner", "jade", 1),
             CourseSpec("fixture-two", "Day21-30", "Fixture Two", "Second", "intermediate", "gold", 2),
         )
         self._write_course("fixture-one", "01.第一课.md", "# 第一课\n\n[下一课](../Day21-30/02.第二课.md)\n")
         self._write_course("fixture-two", "02.第二课.md", "# 第二课\n")
+        self._write_practice_manifest("fixture-one", "Day01-20/01.第一课.md")
+        self._write_practice_manifest("fixture-two", "Day21-30/02.第二课.md")
         self.engine = create_engine(f"sqlite:///{(Path(self.temp_dir.name) / 'test.db').as_posix()}")
         Base.metadata.create_all(self.engine)
         self.db = Session(self.engine)
@@ -84,6 +94,29 @@ class CourseSyncTests(unittest.TestCase):
         (directory / filename).write_text(markdown, encoding="utf-8")
         (directory / "res" / "pixel.png").write_bytes(b"png")
 
+    def _write_practice_manifest(self, course_slug: str, lesson_source_path: str, prompt_suffix: str = "") -> None:
+        exercises = []
+        for position in range(1, 5):
+            exercises.append({
+                "slug": f"{course_slug}-exercise-{position}",
+                "lesson_source_path": lesson_source_path,
+                "title": f"Fixture exercise {position}",
+                "difficulty": "easy",
+                "tags": ["fixtures"],
+                "prompt": f"Return the value. {prompt_suffix}".strip(),
+                "function_name": f"solve_{position}",
+                "signature": {"parameters": [{"name": "value", "type": "int"}], "returns": "int"},
+                "starter_code": f"def solve_{position}(value: int) -> int:\n    return value\n",
+                "cases": [
+                    {"args": [1], "expected": 1},
+                    {"args": [0], "expected": 0},
+                ],
+            })
+        (self.practice_root / f"{course_slug}.json").write_text(
+            json.dumps({"course_slug": course_slug, "exercises": exercises}),
+            encoding="utf-8",
+        )
+
     def _add_user(self) -> User:
         user = User(name="Ada", email="ada@example.com", password_hash="hash")
         self.db.add(user)
@@ -92,10 +125,12 @@ class CourseSyncTests(unittest.TestCase):
 
     def test_first_sync_preserves_users_and_builds_link_index(self) -> None:
         user = self._add_user()
-        result = sync_courses(self.db, self.root, self.specs)
+        result = sync_courses(self.db, self.root, self.specs, self.practice_root)
         self.assertTrue(result.changed)
         self.assertEqual(self.db.scalar(select(func.count(Course.id))), 2)
         self.assertEqual(self.db.scalar(select(func.count(Lesson.id))), 2)
+        self.assertEqual(self.db.scalar(select(func.count(Exercise.id)).where(Exercise.kind == "function")), 8)
+        self.assertEqual(self.db.scalar(select(func.count(ExerciseCase.id))), 16)
         self.assertIsNotNone(self.db.get(User, user.id))
         first = self.db.scalar(select(Lesson).where(Lesson.title == "第一课"))
         second = self.db.scalar(select(Lesson).where(Lesson.title == "第二课"))
@@ -103,41 +138,63 @@ class CourseSyncTests(unittest.TestCase):
 
     def test_second_sync_preserves_ids_and_progress(self) -> None:
         user = self._add_user()
-        first = sync_courses(self.db, self.root, self.specs)
+        first = sync_courses(self.db, self.root, self.specs, self.practice_root)
         lesson = self.db.scalar(select(Lesson).order_by(Lesson.id))
         ids = list(self.db.scalars(select(Course.id).order_by(Course.id)))
         self.db.add(Progress(user_id=user.id, lesson_id=lesson.id, completed=True, score=100))
         self.db.commit()
-        second = sync_courses(self.db, self.root, self.specs)
+        second = sync_courses(self.db, self.root, self.specs, self.practice_root)
         self.assertTrue(first.changed)
         self.assertFalse(second.changed)
         self.assertEqual(list(self.db.scalars(select(Course.id).order_by(Course.id))), ids)
         self.assertEqual(self.db.scalar(select(func.count(Progress.id))), 1)
 
-    def test_changed_markdown_rebuilds_content_and_clears_progress(self) -> None:
+    def test_changed_markdown_rebuilds_catalog_and_clears_progress(self) -> None:
         user = self._add_user()
-        sync_courses(self.db, self.root, self.specs)
+        sync_courses(self.db, self.root, self.specs, self.practice_root)
         lesson = self.db.scalar(select(Lesson).order_by(Lesson.id))
         self.db.add(Progress(user_id=user.id, lesson_id=lesson.id, completed=True, score=80))
         self.db.commit()
         path = self.root / "fixture-one" / "01.第一课.md"
         path.write_text(path.read_text(encoding="utf-8") + "\n内容变化。\n", encoding="utf-8")
-        result = sync_courses(self.db, self.root, self.specs)
+        result = sync_courses(self.db, self.root, self.specs, self.practice_root)
         self.assertTrue(result.changed)
         self.assertEqual(self.db.scalar(select(func.count(Progress.id))), 0)
         self.assertIn("内容变化", self.db.scalar(select(Lesson.markdown).where(Lesson.title == "第一课")))
         self.assertIsNotNone(self.db.get(User, user.id))
 
+    def test_changed_exercise_rebuilds_catalog_and_clears_practice_progress(self) -> None:
+        user = self._add_user()
+        sync_courses(self.db, self.root, self.specs, self.practice_root)
+        exercise = self.db.scalar(select(Exercise).where(Exercise.slug == "fixture-one-exercise-1"))
+        self.db.add(ExerciseProgress(
+            user_id=user.id,
+            exercise_id=exercise.id,
+            status="passed",
+            attempts=3,
+            last_code="def solve_1(value): return value",
+        ))
+        self.db.commit()
+
+        self._write_practice_manifest("fixture-one", "Day01-20/01.第一课.md", "Changed prompt")
+        result = sync_courses(self.db, self.root, self.specs, self.practice_root)
+
+        self.assertTrue(result.changed)
+        updated = self.db.scalar(select(Exercise).where(Exercise.slug == "fixture-one-exercise-1"))
+        self.assertIn("Changed prompt", updated.prompt)
+        self.assertEqual(self.db.scalar(select(func.count(ExerciseProgress.id))), 0)
+        self.assertIsNotNone(self.db.get(User, user.id))
+
     def test_invalid_content_fails_before_touching_database(self) -> None:
-        sync_courses(self.db, self.root, self.specs)
+        sync_courses(self.db, self.root, self.specs, self.practice_root)
         before = list(self.db.scalars(select(Course.slug).order_by(Course.slug)))
         shutil.rmtree(self.root / "fixture-two" / "res")
         with self.assertRaisesRegex(ContentSyncError, "fixture-two"):
-            sync_courses(self.db, self.root, self.specs)
+            sync_courses(self.db, self.root, self.specs, self.practice_root)
         self.assertEqual(list(self.db.scalars(select(Course.slug).order_by(Course.slug))), before)
 
     def test_database_failure_rolls_back_previous_catalog(self) -> None:
-        sync_courses(self.db, self.root, self.specs)
+        sync_courses(self.db, self.root, self.specs, self.practice_root)
         path = self.root / "fixture-one" / "01.第一课.md"
         path.write_text("# 事务失败后的新内容\n", encoding="utf-8")
 
@@ -146,7 +203,7 @@ class CourseSyncTests(unittest.TestCase):
 
         event.listen(self.db, "before_flush", fail_flush, once=True)
         with self.assertRaisesRegex(RuntimeError, "forced flush failure"):
-            sync_courses(self.db, self.root, self.specs)
+            sync_courses(self.db, self.root, self.specs, self.practice_root)
         self.db.expire_all()
         self.assertEqual(self.db.scalar(select(func.count(Course.id))), 2)
         self.assertNotIn("事务失败", self.db.scalar(select(Lesson.markdown).where(Lesson.title == "第一课")))
