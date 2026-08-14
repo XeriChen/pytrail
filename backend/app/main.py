@@ -11,18 +11,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, load_only, selectinload
 from .auth import create_token, current_user, enforce_secret_key_policy, hash_password, verify_password
-from .database import Base, SessionLocal, engine, get_db
+from .database import SessionLocal, engine, get_db
 from .metrics import as_utc_date, compute_streak
 from .models import Course, Exercise, Lesson, Progress, User
 from .ratelimit import auth_limiter
 from .course_sync import ContentSyncError, resolve_content_root, sync_courses
+from .schema_migrations import upgrade_schema
 from .schemas import CourseDetailOut, CourseSummaryOut, ExecuteIn, ExerciseOut, ExerciseSubmit, LessonDetailOut, LessonSummaryOut, LoginRequest, ProgressIn, Token, UserCreate, UserOut
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     enforce_secret_key_policy()
-    Base.metadata.create_all(bind=engine)
+    upgrade_schema(engine)
     db = SessionLocal()
     try:
         result = sync_courses(db, resolve_content_root())
