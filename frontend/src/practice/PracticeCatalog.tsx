@@ -24,8 +24,22 @@ export function PracticeCatalog({ locale, authenticated }: { locale: Locale; aut
   const [params, setParams] = useSearchParams()
   const [data, setData] = useState(EMPTY)
   const [state, setState] = useState<'loading' | 'success' | 'error'>('loading')
-  const [search, setSearch] = useState(params.get('query') || '')
+  const queryParam = params.get('query') || ''
+  const [search, setSearch] = useState(queryParam)
   const [requestKey, setRequestKey] = useState(0)
+
+  useEffect(() => {
+    setSearch(queryParam)
+  }, [queryParam])
+
+  useEffect(() => {
+    if (!authenticated && params.has('status')) {
+      const next = new URLSearchParams(params)
+      next.delete('status')
+      next.delete('page')
+      setParams(next, { replace: true })
+    }
+  }, [authenticated, params, setParams])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -101,7 +115,7 @@ export function PracticeCatalog({ locale, authenticated }: { locale: Locale; aut
             <option value="in_progress">{zh ? '进行中' : 'In progress'}</option>
             <option value="passed">{zh ? '已通过' : 'Passed'}</option>
           </select>
-          {params.toString() && <button className="icon-btn" type="button" title={zh ? '清除筛选' : 'Clear filters'} onClick={() => { setSearch(''); setParams({}) }}><FilterX size={17} /></button>}
+          {params.toString() && <button className="icon-btn" type="button" aria-label={zh ? '清除筛选' : 'Clear filters'} title={zh ? '清除筛选' : 'Clear filters'} onClick={() => { setSearch(''); setParams({}) }}><FilterX size={17} /></button>}
         </div>
       </section>
 
@@ -109,12 +123,11 @@ export function PracticeCatalog({ locale, authenticated }: { locale: Locale; aut
       {state === 'error' && <div className="practice-state"><p>{zh ? '题库暂时无法加载。' : 'The catalog could not be loaded.'}</p><button className="secondary-btn" onClick={() => setRequestKey((value) => value + 1)}>{zh ? '重试' : 'Retry'}</button></div>}
       {state === 'success' && data.items.length === 0 && <div className="practice-state"><CircleDashed size={22} /><p>{zh ? '没有符合条件的题目。' : 'No problems match these filters.'}</p></div>}
       {state === 'success' && data.items.length > 0 && (
-        <div className="practice-table" role="table" aria-label={zh ? '练习题列表' : 'Practice problems'}>
+        <div className="practice-table" aria-label={zh ? '练习题列表' : 'Practice problems'}>
           <div className="practice-table-head" role="row"><span>{zh ? '状态' : 'Status'}</span><span>{zh ? '题目' : 'Problem'}</span><span>{zh ? '对应章节' : 'Curriculum'}</span><span>{zh ? '难度' : 'Level'}</span></div>
           {data.items.map((item, index) => (
             <button
               className="practice-row"
-              role="row"
               type="button"
               key={item.slug}
               onClick={() => navigate(`/practice/${item.slug}`, { state: { from: `/practice?${params}` } })}

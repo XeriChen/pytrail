@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import { python } from '@codemirror/lang-python'
 import { ArrowLeft, BookOpen, CheckCircle2, CircleX, Code2, Play, RotateCcw, Terminal } from 'lucide-react'
@@ -34,32 +34,48 @@ export function PracticeWorkspace({
   const [result, setResult] = useState<PracticeRunResult | null>(null)
   const [mobileTab, setMobileTab] = useState<'statement' | 'code' | 'results'>('statement')
   const [requestKey, setRequestKey] = useState(0)
+  const runRequestId = useRef(0)
 
   useEffect(() => {
     const controller = new AbortController()
+    runRequestId.current += 1
+    setRunning(false)
     setState('loading')
     setDetail(null)
     setResult(null)
     apiRequest<PracticeDetail>(`/practice/exercises/${slug}`, {}, zh ? '题目加载失败' : 'Failed to load problem', controller.signal)
       .then((value) => { setDetail(value); setCode(value.progress?.last_code || value.starter_code); setState('success') })
       .catch((error) => { if (error.name !== 'AbortError') setState('error') })
-    return () => controller.abort()
+    return () => {
+      controller.abort()
+      runRequestId.current += 1
+    }
   }, [slug, requestKey, zh])
 
   const signature = useMemo(() => detail ? `${detail.function_name}(${detail.signature.parameters.map((item) => `${item.name}: ${item.type}`).join(', ')}) -> ${detail.signature.returns}` : '', [detail])
+  const codeBytes = useMemo(() => new TextEncoder().encode(code).length, [code])
   const goBack = () => navigate((location.state as { from?: string } | null)?.from || '/practice')
   const run = async () => {
     if (!authenticated) { onAuth(); return }
     if (!detail || running) return
+    const currentRequest = ++runRequestId.current
     setRunning(true)
     setMobileTab('results')
     try {
-      setResult(await apiRequest<PracticeRunResult>(`/practice/exercises/${detail.slug}/run`, { method: 'POST', body: JSON.stringify({ code }) }, zh ? '运行失败' : 'Run failed'))
+      const nextResult = await apiRequest<PracticeRunResult>(`/practice/exercises/${detail.slug}/run`, { method: 'POST', body: JSON.stringify({ code }) }, zh ? '运行失败' : 'Run failed')
+      if (runRequestId.current === currentRequest) setResult(nextResult)
     } catch (error) {
-      setResult({ ok: false, passed: false, passed_count: 0, total_count: detail.cases.length, error: error instanceof Error ? error.message : (zh ? '运行失败' : 'Run failed'), cases: [], progress: detail.progress! })
+      if (runRequestId.current === currentRequest) {
+        setResult({ ok: false, passed: false, passed_count: 0, total_count: detail.cases.length, error: error instanceof Error ? error.message : (zh ? '运行失败' : 'Run failed'), cases: [], progress: detail.progress })
+      }
     } finally {
-      setRunning(false)
+      if (runRequestId.current === currentRequest) setRunning(false)
     }
+  }
+  const resetCode = () => {
+    if (code !== detail?.starter_code && !window.confirm(zh ? '放弃当前修改并恢复起始代码？' : 'Discard your changes and restore the starter code?')) return
+    setCode(detail?.starter_code || '')
+    setResult(null)
   }
 
   if (state === 'loading') return <div className="practice-state workspace-state"><span className="state-spinner" />{zh ? '正在打开工作台' : 'Opening workspace'}</div>
@@ -86,9 +102,9 @@ export function PracticeWorkspace({
           <button className="lesson-link-btn" type="button" onClick={() => onOpenLesson(detail.lesson.id)}><BookOpen size={16} />{zh ? '回到对应课时' : 'Open related lesson'}</button>
         </section>
         <section className={`workspace-code ${mobileTab === 'code' ? 'mobile-active' : ''}`}>
-          <div className="editor-toolbar"><div><Terminal size={16} /><span>Python 3</span></div><button className="icon-btn" type="button" title={zh ? '重置代码' : 'Reset code'} onClick={() => setCode(detail.starter_code)}><RotateCcw size={16} /></button></div>
+          <div className="editor-toolbar"><div><Terminal size={16} /><span>Python 3</span></div><button className="icon-btn" type="button" aria-label={zh ? '重置代码' : 'Reset code'} title={zh ? '重置代码' : 'Reset code'} onClick={resetCode}><RotateCcw size={16} /></button></div>
           <CodeMirror value={code} onChange={setCode} extensions={[python()]} theme={theme} height="100%" minHeight="360px" aria-label={zh ? 'Python 代码' : 'Python code'} basicSetup={{ lineNumbers: true, bracketMatching: true, autocompletion: false }} />
-          <div className="editor-actions"><span>{code.length} / 12000</span><button className="run-practice-btn" type="button" disabled={running || code.length > 12000} onClick={run}><Play size={16} />{running ? (zh ? '运行中' : 'Running') : (zh ? '运行样例' : 'Run examples')}</button></div>
+          <div className="editor-actions"><span>{codeBytes} / 12000 B</span><button className="run-practice-btn" type="button" disabled={running || codeBytes > 12000} onClick={run}><Play size={16} />{running ? (zh ? '运行中' : 'Running') : (zh ? '运行样例' : 'Run examples')}</button></div>
         </section>
         <aside className={`workspace-results ${mobileTab === 'results' ? 'mobile-active' : ''}`}>
           <div className="results-head"><span>{zh ? '运行结果' : 'Run results'}</span>{result && <strong className={result.passed ? 'passed' : 'failed'}>{result.passed ? (zh ? '全部通过' : 'All passed') : `${result.passed_count}/${result.total_count}`}</strong>}</div>

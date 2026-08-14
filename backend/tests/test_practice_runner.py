@@ -35,10 +35,25 @@ class PracticeRunnerTests(unittest.TestCase):
         result = run_practice(code, "normalize", ["values"], [PracticeCaseInput([[3, 1, 2]], {}, [1, 3, 5])])
         self.assertTrue(result["passed"], result)
 
+    def test_type_annotations_do_not_require_runtime_builtins(self) -> None:
+        code = "def wrap(value: object) -> list[object]:\n    return [value]\n"
+        result = run_practice(code, "wrap", ["value"], [PracticeCaseInput([3], {}, [3])])
+        self.assertTrue(result["passed"], result)
+
+    def test_worker_protocol_is_utf8_for_non_ascii_results(self) -> None:
+        result = run_practice(
+            "def echo(value):\n    return value\n",
+            "echo",
+            ["value"],
+            [PracticeCaseInput(["中文样例"], {}, "中文样例")],
+        )
+        self.assertTrue(result["passed"], result)
+
     def test_rejects_unsafe_syntax_and_wrong_signatures(self) -> None:
         blocked = {
             "import os\ndef add(left, right): return left + right": "Import",
             "def add(left, right): return open('x')": "open()",
+            "def add(left, right):\n    setter = setattr\n    return setter(left, 'x', right)": "setattr()",
             "def add(left, right): return left.__class__": "Private attributes",
             "def add(value): return value": "signature",
         }

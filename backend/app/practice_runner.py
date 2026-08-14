@@ -22,6 +22,10 @@ class PracticeRunError(ValueError):
     pass
 
 
+class PracticeRunnerUnavailable(RuntimeError):
+    pass
+
+
 @dataclass(frozen=True)
 class PracticeCaseInput:
     args: list[Any]
@@ -83,10 +87,11 @@ def validate_source(code: str, function_name: str, parameter_names: list[str]) -
             raise PracticeRunError(f"{type(node).__name__} is not allowed")
         if isinstance(node, ast.Attribute) and node.attr.startswith("_"):
             raise PracticeRunError("Private attributes are not allowed")
-        if isinstance(node, ast.Name) and node.id.startswith("__"):
-            raise PracticeRunError("Private names are not allowed")
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in BLOCKED_CALLS:
-            raise PracticeRunError(f"{node.func.id}() is not allowed")
+        if isinstance(node, ast.Name):
+            if node.id.startswith("__"):
+                raise PracticeRunError("Private names are not allowed")
+            if node.id in BLOCKED_CALLS:
+                raise PracticeRunError(f"{node.id}() is not allowed")
         if isinstance(node, ast.FunctionDef) and node.name == function_name:
             if target is not None:
                 raise PracticeRunError(f"Define {function_name} exactly once")
@@ -157,14 +162,14 @@ def run_practice(
         }
 
     if len(completed.stdout) > MAX_OUTPUT_BYTES:
-        raise PracticeRunError("Runner output exceeded the limit")
+        raise PracticeRunnerUnavailable("Runner output exceeded the limit")
     if completed.returncode != 0:
         detail = completed.stderr.decode("utf-8", errors="replace")[-2_000:].strip()
-        raise PracticeRunError(detail or "The isolated runner failed")
+        raise PracticeRunnerUnavailable(detail or "The isolated runner failed")
     try:
         result = json.loads(completed.stdout.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise PracticeRunError("The isolated runner returned invalid output") from exc
+        raise PracticeRunnerUnavailable("The isolated runner returned invalid output") from exc
     if not isinstance(result, dict):
-        raise PracticeRunError("The isolated runner returned invalid output")
+        raise PracticeRunnerUnavailable("The isolated runner returned invalid output")
     return result

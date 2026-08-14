@@ -142,6 +142,7 @@ function AppShell() {
   const { theme, toggleTheme } = useTheme()
   const location = useLocation()
   const navigate = useNavigate()
+  const practiceRoute = location.pathname.startsWith('/practice')
   const [locale, setLocaleState] = useState<Locale>(() => readLocale(typeof localStorage === 'undefined' ? null : localStorage))
   const [user, setUser] = useState<User | null>(null)
   const [dashboard, setDashboard] = useState<Dashboard>({ lessons_total: 0, lessons_completed: 0, completion: 0, average_score: 0, streak: 0 })
@@ -227,7 +228,6 @@ function AppShell() {
   }
 
   useEffect(() => {
-    loadCourses()
     if (localStorage.getItem('pytrail_token')) {
       request<User>('/auth/me', {}, failed)
         .then((u) => {
@@ -238,6 +238,12 @@ function AppShell() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    if (!practiceRoute && catalogState === 'idle') loadCourses()
+    // loadCourses intentionally runs only when the non-practice shell first needs its catalog.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [practiceRoute, catalogState])
 
   useEffect(() => {
     if (tab === 'course' && courseState === 'idle' && courses[0]) {
@@ -275,7 +281,6 @@ function AppShell() {
     setUser(null)
   }
 
-  const practiceRoute = location.pathname.startsWith('/practice')
   const activeTab: Tab = practiceRoute ? 'practice' : tab
   const crumb =
     activeTab === 'overview' ? tx('crumb.overview') : activeTab === 'course' ? (selectedCourse ? localizeCourse(locale, selectedCourse).title : tx('course.fallbackTitle')) : tx('crumb.practice')

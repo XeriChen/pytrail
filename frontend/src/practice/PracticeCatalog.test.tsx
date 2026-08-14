@@ -33,7 +33,7 @@ describe('practice catalog', () => {
     expect(await screen.findByRole('heading', { name: '九门课程精选题' })).toBeInTheDocument()
     expect(screen.getByText('区间质数统计')).toBeInTheDocument()
     expect(String(vi.mocked(fetch).mock.calls[0][0])).toContain('/api/practice/exercises')
-    fireEvent.click(screen.getByRole('row', { name: /区间质数统计/ }))
+    fireEvent.click(screen.getByRole('button', { name: /区间质数统计/ }))
     expect(await screen.findByRole('heading', { name: '工作台' })).toBeInTheDocument()
   })
 

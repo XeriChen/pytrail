@@ -63,5 +63,5 @@ export type PracticeRunResult = {
     error?: string
     duration_ms: number
   }[]
-  progress: PracticeProgress
+  progress: PracticeProgress | null
 }

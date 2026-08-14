@@ -15,7 +15,7 @@ from .auth import create_token, current_user, enforce_secret_key_policy, hash_pa
 from .database import Base, SessionLocal, engine, get_db
 from .metrics import as_utc_date, compute_streak
 from .models import Course, Exercise, Lesson, Progress, User
-from .practice_runner import MAX_SOURCE_BYTES, PracticeCaseInput, PracticeRunError, run_practice
+from .practice_runner import MAX_SOURCE_BYTES, PracticeCaseInput, PracticeRunError, PracticeRunnerUnavailable, run_practice
 from .practice_service import DIFFICULTIES, STATUSES, exercise_detail, get_exercise, list_exercises, record_run
 from .ratelimit import auth_limiter, practice_limiter
 from .course_sync import ContentSyncError, resolve_content_root, sync_courses
@@ -213,7 +213,7 @@ def run_practice_exercise(
         )
     except PracticeRunError as exc:
         result = {"ok": False, "passed": False, "passed_count": 0, "total_count": len(cases), "error": str(exc), "cases": []}
-    except OSError as exc:
+    except (OSError, PracticeRunnerUnavailable) as exc:
         raise HTTPException(503, "Practice runner unavailable") from exc
     progress = record_run(db, user, exercise, payload.code, bool(result["passed"]))
     result["progress"] = PracticeProgressOut.model_validate(progress, from_attributes=True)

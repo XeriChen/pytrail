@@ -5,11 +5,13 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import case, select
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session, selectinload
 
 from .course_sync import COURSE_SPECS
-from .models import Course, Exercise, ExerciseProgress, Lesson, User
+from .models import Course, Exercise, ExerciseProgress, Lesson, User, utc_now
 from .schemas import (
     PracticeCaseOut,
     PracticeCatalogOut,
@@ -156,7 +158,7 @@ def exercise_detail(db: Session, exercise: Exercise, user: User | None) -> Pract
         prompt=exercise.prompt,
         function_name=exercise.function_name or "",
         signature=PracticeSignatureOut.model_validate(signature),
-        starter_code=progress.last_code if progress and progress.last_code else exercise.starter_code,
+        starter_code=exercise.starter_code,
         cases=[
             PracticeCaseOut(
                 order=case.order,
@@ -173,6 +175,39 @@ def exercise_detail(db: Session, exercise: Exercise, user: User | None) -> Pract
 
 
 def record_run(db: Session, user: User, exercise: Exercise, code: str, passed: bool) -> ExerciseProgress:
+    dialect = db.get_bind().dialect.name
+    if dialect == "sqlite":
+        statement = sqlite_insert(ExerciseProgress)
+    elif dialect == "postgresql":
+        statement = postgresql_insert(ExerciseProgress)
+    else:
+        raise RuntimeError(f"Unsupported database dialect for practice progress: {dialect}")
+
+    statement = statement.values(
+        user_id=user.id,
+        exercise_id=exercise.id,
+        status="passed" if passed else "in_progress",
+        attempts=1,
+        last_code=code,
+        updated_at=utc_now(),
+    )
+    excluded = statement.excluded
+    statement = statement.on_conflict_do_update(
+        index_elements=["user_id", "exercise_id"],
+        set_={
+            "status": case(
+                (ExerciseProgress.status == "passed", "passed"),
+                (excluded.status == "passed", "passed"),
+                else_="in_progress",
+            ),
+            "attempts": ExerciseProgress.attempts + 1,
+            "last_code": excluded.last_code,
+            "updated_at": excluded.updated_at,
+        },
+    )
+    db.execute(statement)
+    db.commit()
+    db.expire_all()
     progress = db.scalar(
         select(ExerciseProgress).where(
             ExerciseProgress.user_id == user.id,
@@ -180,12 +215,5 @@ def record_run(db: Session, user: User, exercise: Exercise, code: str, passed: b
         )
     )
     if progress is None:
-        progress = ExerciseProgress(user_id=user.id, exercise_id=exercise.id, attempts=0)
-        db.add(progress)
-    progress.attempts = (progress.attempts or 0) + 1
-    progress.last_code = code
-    if passed or progress.status != "passed":
-        progress.status = "passed" if passed else "in_progress"
-    db.commit()
-    db.refresh(progress)
+        raise RuntimeError("Practice progress was not persisted")
     return progress

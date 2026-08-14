@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 import warnings
+from unittest.mock import patch
 from datetime import date, datetime, timedelta, timezone
 from itertools import count
 from pathlib import Path
@@ -33,7 +34,7 @@ from app.auth import (  # noqa: E402
 from app.database import SessionLocal, engine  # noqa: E402
 from app.main import app  # noqa: E402
 from app.metrics import compute_streak  # noqa: E402
-from app.models import Exercise, Progress  # noqa: E402
+from app.models import Exercise, ExerciseProgress, Progress  # noqa: E402
 from app.ratelimit import auth_limiter, practice_limiter  # noqa: E402
 
 _EMAILS = count(1)
@@ -129,6 +130,7 @@ class ApiTests(unittest.TestCase):
         slug = "filter-and-square"
         self.assertEqual(self.client.post(f"/api/practice/exercises/{slug}/run", json={"code": "def x(): pass"}).status_code, 401)
         auth = self.register()
+        starter_code = self.client.get(f"/api/practice/exercises/{slug}").json()["starter_code"]
         failed_code = "def filter_and_square(numbers, minimum):\n    return []\n"
         failed = self.client.post(f"/api/practice/exercises/{slug}/run", headers=auth["headers"], json={"code": failed_code})
         self.assertEqual(failed.status_code, 200, failed.text)
@@ -146,7 +148,7 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(again.json()["progress"]["status"], "passed")
         self.assertEqual(again.json()["progress"]["attempts"], 3)
         resumed = self.client.get(f"/api/practice/exercises/{slug}", headers=auth["headers"]).json()
-        self.assertEqual(resumed["starter_code"], failed_code)
+        self.assertEqual(resumed["starter_code"], starter_code)
         self.assertEqual(resumed["progress"]["last_code"], failed_code)
 
         status = self.client.get("/api/practice/exercises", headers=auth["headers"], params={"status": "passed", "page_size": 48})
@@ -160,6 +162,37 @@ class ApiTests(unittest.TestCase):
             exercise_id = exercise.id
         response = self.client.post(f"/api/exercises/{exercise_id}/submit", headers=auth["headers"], json={"answer": "x"})
         self.assertEqual(response.status_code, 404)
+
+    def test_practice_validation_limits_and_runner_failure_are_bounded(self) -> None:
+        auth = self.register()
+        slug = "filter-and-square"
+        oversized = self.client.post(
+            f"/api/practice/exercises/{slug}/run",
+            headers=auth["headers"],
+            json={"code": "x" * 12_001},
+        )
+        self.assertEqual(oversized.status_code, 413)
+
+        invalid = self.client.post(
+            f"/api/practice/exercises/{slug}/run",
+            headers=auth["headers"],
+            json={"code": "import os\ndef filter_and_square(numbers, minimum): return []"},
+        )
+        self.assertEqual(invalid.status_code, 200, invalid.text)
+        self.assertFalse(invalid.json()["ok"])
+        self.assertIn("Import", invalid.json()["error"])
+
+        with patch("app.main.run_practice", side_effect=OSError("worker unavailable")):
+            unavailable = self.client.post(
+                f"/api/practice/exercises/{slug}/run",
+                headers=auth["headers"],
+                json={"code": "def filter_and_square(numbers, minimum): return []"},
+            )
+        self.assertEqual(unavailable.status_code, 503)
+        with SessionLocal() as db:
+            exercise = db.scalar(select(Exercise).where(Exercise.slug == slug))
+            progress = db.scalar(select(ExerciseProgress).where(ExerciseProgress.user_id == auth["user"]["id"], ExerciseProgress.exercise_id == exercise.id))
+            self.assertEqual(progress.attempts, 1)
 
     def test_catalog_errors_and_assets_are_safe(self) -> None:
         self.assertEqual(self.client.get("/api/courses/999999").status_code, 404)

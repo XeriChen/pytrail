@@ -2,6 +2,10 @@ import React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
+vi.mock('@uiw/react-codemirror', () => ({
+  default: ({ value, onChange, ...props }: { value: string; onChange: (value: string) => void; 'aria-label'?: string }) => <textarea aria-label={props['aria-label']} value={value} onChange={(event) => onChange(event.target.value)} />,
+}))
+
 type CourseSummary = {
   id: number
   slug: string
@@ -56,6 +60,21 @@ const SECOND_LESSON_DETAIL = {
   exercises: [{ id: 2, prompt: 'Which function prints text?', starter_code: 'print("hello")' }],
 }
 
+const PRACTICE_DETAIL = {
+  slug: 'filter-and-square',
+  title: '筛选并平方',
+  difficulty: 'easy',
+  tags: ['lists'],
+  progress: null,
+  course: { id: 1, slug: 'python-foundations', title: 'Python 基础' },
+  lesson: { id: 101, title: '初识Python', order: 1 },
+  prompt: '实现筛选与平方。',
+  function_name: 'filter_and_square',
+  signature: { parameters: [{ name: 'numbers', type: 'list[int]' }, { name: 'minimum', type: 'int' }], returns: 'list[int]' },
+  starter_code: 'def filter_and_square(numbers, minimum):\n    return []\n',
+  cases: [{ order: 1, args: [[1, 2], 2], kwargs: {}, expected: [4], explanation: '保留 2', comparison: 'exact', tolerance: 0.000001 }],
+}
+
 const NO_EXERCISE_LESSON = {
   id: 201,
   course_id: 2,
@@ -84,6 +103,7 @@ function baseRespond(input: RequestInfo | URL): Promise<Response> {
         headers: { 'Content-Type': 'application/json' },
       }),
     )
+  if (url.includes('/api/practice/exercises/filter-and-square')) return respond(PRACTICE_DETAIL)
   if (url.includes('/api/practice/exercises')) return respond({ items: [], total: 0, page: 1, page_size: 12, facets: { courses: [], lessons: [], difficulties: [], tags: [] } })
   if (url.includes('/api/courses/1')) return respond(FOUNDATIONS_DETAIL)
   if (url.includes('/api/courses/2')) return respond(FOUNDATIONS_COURSE_2)
@@ -185,6 +205,27 @@ describe('on-demand course and lesson workflow', () => {
     expect(await screen.findByRole('heading', { name: '九门课程精选题' })).toBeInTheDocument()
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/practice/exercises'))).toBe(true)
     expect(fetchMock.mock.calls.some(([url]) => /\/api\/courses\/\d+|\/api\/lessons\//.test(String(url)))).toBe(false)
+  })
+
+  it('opens a direct practice workspace without loading the curriculum catalog', async () => {
+    window.history.replaceState(null, '', '/practice/filter-and-square')
+    const fetchMock = vi.mocked(fetch)
+    await mount()
+    expect(await screen.findByRole('heading', { name: '筛选并平方' })).toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/practice/exercises/filter-and-square'))).toBe(true)
+    expect(fetchMock.mock.calls.some(([url]) => /\/api\/courses|\/api\/lessons/.test(String(url)))).toBe(false)
+  })
+
+  it('opens practice filtered to the exact related lesson', async () => {
+    const fetchMock = vi.mocked(fetch)
+    await mount()
+    await waitFor(() => expect(screen.getAllByTestId('course-card')).toHaveLength(9))
+    fireEvent.click(screen.getAllByTestId('course-card')[0].querySelector('button')!)
+    const related = await screen.findByRole('button', { name: /本节配套练习 1 题/ })
+    fetchMock.mockClear()
+    fireEvent.click(related)
+    expect(await screen.findByRole('heading', { name: '九门课程精选题' })).toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/practice/exercises?lesson_id=101'))).toBe(true)
   })
 
   it('resets exercise input when navigating to another lesson', async () => {

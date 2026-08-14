@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import __future__
 import json
 import math
 import sys
@@ -17,6 +18,17 @@ from RestrictedPython.Guards import (
     safe_builtins,
     safer_getattr,
 )
+
+
+def _apply_host_limits() -> None:
+    try:
+        import resource
+    except ImportError:
+        return
+    memory_bytes = 256 * 1024 * 1024
+    resource.setrlimit(resource.RLIMIT_AS, (memory_bytes, memory_bytes))
+    resource.setrlimit(resource.RLIMIT_CPU, (2, 2))
+    resource.setrlimit(resource.RLIMIT_NOFILE, (8, 8))
 
 
 def _inplace(operation: str, left: Any, right: Any) -> Any:
@@ -59,8 +71,15 @@ def _json_safe(value: Any) -> Any:
     return json.loads(encoded)
 
 
+def _emit(payload: dict[str, Any]) -> None:
+    encoded = json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8")
+    sys.stdout.buffer.write(encoded)
+
+
 def _namespace() -> dict[str, Any]:
     builtins = dict(safe_builtins)
+    builtins.pop("setattr", None)
+    builtins.pop("delattr", None)
     builtins.update(
         {
             "all": all,
@@ -89,8 +108,14 @@ def _namespace() -> dict[str, Any]:
 
 
 def main() -> None:
+    _apply_host_limits()
     payload = json.loads(sys.stdin.buffer.read().decode("utf-8"))
-    code = compile_restricted(payload["code"], filename="<submission>", mode="exec")
+    code = compile_restricted(
+        payload["code"],
+        filename="<submission>",
+        mode="exec",
+        flags=__future__.annotations.compiler_flag,
+    )
     namespace = _namespace()
     exec(code, namespace)
     function = namespace[payload["function_name"]]
@@ -117,19 +142,15 @@ def main() -> None:
 
     passed_count = sum(item["passed"] for item in results)
     passed = len(results) == len(payload["cases"]) and passed_count == len(payload["cases"])
-    print(
-        json.dumps(
-            {
-                "ok": True,
-                "passed": passed,
-                "passed_count": passed_count,
-                "total_count": len(payload["cases"]),
-                "error": None,
-                "cases": results,
-            },
-            ensure_ascii=False,
-            allow_nan=False,
-        )
+    _emit(
+        {
+            "ok": True,
+            "passed": passed,
+            "passed_count": passed_count,
+            "total_count": len(payload["cases"]),
+            "error": None,
+            "cases": results,
+        }
     )
 
 
@@ -137,16 +158,13 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as exc:
-        print(
-            json.dumps(
-                {
-                    "ok": False,
-                    "passed": False,
-                    "passed_count": 0,
-                    "total_count": 0,
-                    "error": f"{type(exc).__name__}: {exc}",
-                    "cases": [],
-                },
-                ensure_ascii=False,
-            )
+        _emit(
+            {
+                "ok": False,
+                "passed": False,
+                "passed_count": 0,
+                "total_count": 0,
+                "error": f"{type(exc).__name__}: {exc}",
+                "cases": [],
+            }
         )
