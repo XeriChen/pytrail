@@ -1,0 +1,155 @@
+{
+  "course_slug": "python-foundations",
+  "exercises": [
+    {
+      "slug": "prime-range-summary",
+      "lesson_source_path": "Day01-20/07.分支和循环结构实战.md",
+      "title": "区间质数统计",
+      "difficulty": "easy",
+      "tags": ["loops", "conditions", "numbers"],
+      "prompt": "实现 `prime_summary(start, end)`，统计闭区间 `[start, end]` 中的全部质数。返回 `primes`（按从小到大排列的质数列表）和 `count`（质数数量）。\n\n小于 2 的整数不是质数；当 `start > end` 或区间内没有质数时，返回空列表和数量 `0`。不得使用随机数或外部库。",
+      "function_name": "prime_summary",
+      "signature": {
+        "parameters": [
+          {"name": "start", "type": "int"},
+          {"name": "end", "type": "int"}
+        ],
+        "returns": "dict[str, object]"
+      },
+      "starter_code": "def prime_summary(start: int, end: int) -> dict:\n    return {\"primes\": [], \"count\": 0}\n",
+      "cases": [
+        {
+          "args": [2, 10],
+          "expected": {"primes": [2, 3, 5, 7], "count": 4},
+          "explanation": "闭区间两端都参与判断。"
+        },
+        {
+          "args": [-3, 3],
+          "expected": {"primes": [2, 3], "count": 2},
+          "explanation": "负数、0 和 1 都不是质数。"
+        },
+        {
+          "args": [14, 16],
+          "expected": {"primes": [], "count": 0},
+          "explanation": "区间内没有质数。"
+        },
+        {
+          "args": [10, 2],
+          "expected": {"primes": [], "count": 0},
+          "explanation": "起点大于终点时直接返回空结果。"
+        }
+      ]
+    },
+    {
+      "slug": "filter-and-square",
+      "lesson_source_path": "Day01-20/09.常用数据结构之列表-2.md",
+      "title": "筛选并平方",
+      "difficulty": "easy",
+      "tags": ["lists", "filtering", "comprehensions"],
+      "prompt": "实现 `filter_and_square(numbers, minimum)`。从左到右筛选出所有大于或等于 `minimum` 的整数，并返回它们平方后的新列表。\n\n必须保留原始相对顺序和重复元素，不得修改传入的列表；空列表返回空列表。",
+      "function_name": "filter_and_square",
+      "signature": {
+        "parameters": [
+          {"name": "numbers", "type": "list[int]"},
+          {"name": "minimum", "type": "int"}
+        ],
+        "returns": "list[int]"
+      },
+      "starter_code": "def filter_and_square(numbers: list[int], minimum: int) -> list[int]:\n    return []\n",
+      "cases": [
+        {
+          "args": [[1, -2, 3, 4], 2],
+          "expected": [9, 16],
+          "explanation": "只保留大于或等于阈值的 3 和 4。"
+        },
+        {
+          "args": [[-3, -2, -2, -1], -2],
+          "expected": [4, 4, 1],
+          "explanation": "阈值本身和重复元素都应保留。"
+        },
+        {
+          "args": [[], 0],
+          "expected": [],
+          "explanation": "空输入得到空结果。"
+        }
+      ]
+    },
+    {
+      "slug": "word-frequency",
+      "lesson_source_path": "Day01-20/11.常用数据结构之字符串.md",
+      "title": "单词频次表",
+      "difficulty": "easy",
+      "tags": ["strings", "dictionaries", "counting"],
+      "prompt": "实现 `word_frequency(text)`，先用字符串的默认 `split()` 规则按任意连续空白切分文本，再将每个单词转为小写并统计出现次数。\n\n标点符号视为单词的一部分，不额外删除；结果字典的键为小写单词，值为次数。空字符串或只含空白的字符串返回空字典。",
+      "function_name": "word_frequency",
+      "signature": {
+        "parameters": [
+          {"name": "text", "type": "str"}
+        ],
+        "returns": "dict[str, int]"
+      },
+      "starter_code": "def word_frequency(text: str) -> dict[str, int]:\n    return {}\n",
+      "cases": [
+        {
+          "args": ["Python python PYTHON"],
+          "expected": {"python": 3},
+          "explanation": "统计时不区分大小写。"
+        },
+        {
+          "args": ["red  blue\nred\tgreen"],
+          "expected": {"red": 2, "blue": 1, "green": 1},
+          "explanation": "空格、换行和制表符都可分隔单词。"
+        },
+        {
+          "args": ["hello, hello"],
+          "expected": {"hello,": 1, "hello": 1},
+          "explanation": "题目约定不移除标点。"
+        },
+        {
+          "args": ["   "],
+          "expected": {},
+          "explanation": "只含空白的文本没有单词。"
+        }
+      ]
+    },
+    {
+      "slug": "group-scores",
+      "lesson_source_path": "Day01-20/13.常用数据结构之字典.md",
+      "title": "分组汇总成绩",
+      "difficulty": "medium",
+      "tags": ["dictionaries", "aggregation", "records"],
+      "prompt": "实现 `group_scores(records)`。每条记录都是包含非空字符串 `group` 和整数 `score` 的字典。请按组汇总，并为每个组返回 `count`（记录数）、`total`（总分）和 `highest`（最高分）。\n\n同组记录可以不连续出现，负分也需要正常参与统计；空记录列表返回空字典。不得修改输入记录。",
+      "function_name": "group_scores",
+      "signature": {
+        "parameters": [
+          {"name": "records", "type": "list[dict[str, object]]"}
+        ],
+        "returns": "dict[str, dict[str, int]]"
+      },
+      "starter_code": "def group_scores(records: list[dict]) -> dict:\n    return {}\n",
+      "cases": [
+        {
+          "args": [[{"group": "A", "score": 82}, {"group": "B", "score": 91}, {"group": "A", "score": 95}]],
+          "expected": {
+            "A": {"count": 2, "total": 177, "highest": 95},
+            "B": {"count": 1, "total": 91, "highest": 91}
+          },
+          "explanation": "同一组的记录可以分散在列表中。"
+        },
+        {
+          "args": [[{"group": "red", "score": -2}, {"group": "red", "score": -5}, {"group": "blue", "score": 0}]],
+          "expected": {
+            "red": {"count": 2, "total": -7, "highest": -2},
+            "blue": {"count": 1, "total": 0, "highest": 0}
+          },
+          "explanation": "负分和零分也要正确聚合。"
+        },
+        {
+          "args": [[]],
+          "expected": {},
+          "explanation": "没有记录时不产生任何分组。"
+        }
+      ]
+    }
+  ]
+}

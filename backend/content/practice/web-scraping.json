@@ -1,0 +1,209 @@
+{
+  "course_slug": "web-scraping",
+  "exercises": [
+    {
+      "slug": "robots-path-policy",
+      "lesson_source_path": "Day61-65/61.网络数据采集概述.md",
+      "title": "判断 Robots 路径策略",
+      "difficulty": "medium",
+      "tags": ["robots", "strings", "conditions"],
+      "prompt": "实现 `is_path_allowed(rules, path)`，判断爬虫是否可以访问给定路径。\n\n`rules` 中每一项都包含 `directive`（`\"allow\"` 或 `\"disallow\"`）和 `path`。规则路径使用简单的前缀匹配，不包含通配符。只考虑能够匹配请求路径的规则，并采用路径最长的一条；如果最长的 `allow` 和 `disallow` 规则长度相同，`allow` 优先。空规则路径不参与匹配。没有任何规则匹配时允许访问。\n\n输入路径始终以 `/` 开头。函数只返回布尔值，不读取网络或文件。",
+      "function_name": "is_path_allowed",
+      "signature": {
+        "parameters": [
+          {"name": "rules", "type": "list[dict[str, str]]"},
+          {"name": "path", "type": "str"}
+        ],
+        "returns": "bool"
+      },
+      "starter_code": "def is_path_allowed(rules: list[dict[str, str]], path: str) -> bool:\n    return True\n",
+      "cases": [
+        {
+          "args": [
+            [
+              {"directive": "disallow", "path": "/private"},
+              {"directive": "allow", "path": "/private/public"}
+            ],
+            "/private/public/report"
+          ],
+          "expected": true,
+          "explanation": "更长的 allow 规则覆盖较短的 disallow 规则。"
+        },
+        {
+          "args": [
+            [
+              {"directive": "disallow", "path": "/private"},
+              {"directive": "allow", "path": "/private/public"}
+            ],
+            "/private/profile"
+          ],
+          "expected": false,
+          "explanation": "请求只匹配 /private，因而应拒绝访问。"
+        },
+        {
+          "args": [
+            [
+              {"directive": "disallow", "path": "/tmp"},
+              {"directive": "allow", "path": "/tmp"}
+            ],
+            "/tmp/cache"
+          ],
+          "expected": true,
+          "explanation": "相同长度的规则发生冲突时 allow 优先。"
+        },
+        {
+          "args": [
+            [{"directive": "disallow", "path": ""}],
+            "/news"
+          ],
+          "expected": true,
+          "explanation": "空规则路径不匹配任何请求路径。"
+        }
+      ]
+    },
+    {
+      "slug": "merge-query-params",
+      "lesson_source_path": "Day61-65/62.用Python获取网络资源-1.md",
+      "title": "合并分页查询参数",
+      "difficulty": "medium",
+      "tags": ["url", "http", "strings", "dictionaries"],
+      "prompt": "实现 `build_url(base_url, params)`，把查询参数合并进一个 URL。\n\n测试数据中的原查询串由互不重复的 `key=value` 项组成，参数名和值已经是 URL 安全字符，不需要百分号编码。`params` 的值只会是字符串、整数、布尔值或 `None`：布尔值写成小写的 `true` / `false`，`None` 删除同名旧参数，其他值转成字符串。更新已有参数时保留它原来的位置；新参数按字典迭代顺序追加。URL 的 `#fragment` 必须原样放在最终结果末尾。\n\n不能导入 URL 库，也不能发起网络请求。",
+      "function_name": "build_url",
+      "signature": {
+        "parameters": [
+          {"name": "base_url", "type": "str"},
+          {"name": "params", "type": "dict[str, object]"}
+        ],
+        "returns": "str"
+      },
+      "starter_code": "def build_url(base_url: str, params: dict[str, object]) -> str:\n    return base_url\n",
+      "cases": [
+        {
+          "args": [
+            "https://example.com/search?q=python&page=1",
+            {"page": 2, "lang": "zh"}
+          ],
+          "expected": "https://example.com/search?q=python&page=2&lang=zh",
+          "explanation": "已有 page 就地更新，新 lang 参数追加到末尾。"
+        },
+        {
+          "args": [
+            "https://example.com/items?sort=asc#results",
+            {"sort": null, "page": 3, "debug": true}
+          ],
+          "expected": "https://example.com/items?page=3&debug=true#results",
+          "explanation": "删除旧参数、追加新参数，并保留片段标识。"
+        },
+        {
+          "args": [
+            "https://example.com/feed?compact=true",
+            {"compact": false}
+          ],
+          "expected": "https://example.com/feed?compact=false",
+          "explanation": "布尔值使用小写文本。"
+        },
+        {
+          "args": ["https://example.com/path#top", {}],
+          "expected": "https://example.com/path#top",
+          "explanation": "没有新参数时 URL 保持不变。"
+        }
+      ]
+    },
+    {
+      "slug": "normalize-extracted-records",
+      "lesson_source_path": "Day61-65/62.用Python解析HTML页面-2.md",
+      "title": "清洗网页抽取记录",
+      "difficulty": "easy",
+      "tags": ["parsing", "strings", "data-cleaning"],
+      "prompt": "实现 `normalize_records(records)`，清洗从网页节点中抽取出的记录。\n\n每条输入都包含 `title`、`url` 和 `score`。标题用 `split()` 后再连接的方式折叠所有空白，URL 去除两端空白；标题或 URL 清洗后为空的记录应丢弃。`score` 为 `None` 或空白字符串时输出 `None`，否则转成浮点数（测试中的字符串均可合法转换）。\n\n输出记录只包含 `title`、`url`、`score` 三个键，并保持有效记录原有的相对顺序。",
+      "function_name": "normalize_records",
+      "signature": {
+        "parameters": [
+          {"name": "records", "type": "list[dict[str, object]]"}
+        ],
+        "returns": "list[dict[str, object]]"
+      },
+      "starter_code": "def normalize_records(records: list[dict[str, object]]) -> list[dict[str, object]]:\n    return []\n",
+      "cases": [
+        {
+          "args": [[
+            {"title": "  Python   入门 ", "url": " https://a.test/1 ", "score": "9.2"},
+            {"title": "   ", "url": "https://a.test/2", "score": "8.0"}
+          ]],
+          "expected": [
+            {"title": "Python 入门", "url": "https://a.test/1", "score": 9.2}
+          ],
+          "explanation": "折叠标题空白，并丢弃标题为空的记录。"
+        },
+        {
+          "args": [[
+            {"title": "无评分", "url": "https://b.test/a", "score": null},
+            {"title": "整数评分", "url": "https://b.test/b", "score": 8}
+          ]],
+          "expected": [
+            {"title": "无评分", "url": "https://b.test/a", "score": null},
+            {"title": "整数评分", "url": "https://b.test/b", "score": 8.0}
+          ],
+          "explanation": "缺失评分保留为 None，数字评分统一转成浮点数。"
+        },
+        {
+          "args": [[
+            {"title": "  数据\t分析  ", "url": "  https://c.test/item  ", "score": "  "},
+            {"title": "有效标题", "url": "   ", "score": "7.5"}
+          ]],
+          "expected": [
+            {"title": "数据 分析", "url": "https://c.test/item", "score": null}
+          ],
+          "explanation": "空白评分变为 None，URL 为空的记录被丢弃。"
+        }
+      ]
+    },
+    {
+      "slug": "deduplicate-crawl-queue",
+      "lesson_source_path": "Day61-65/63.并发编程在爬虫中的应用.md",
+      "title": "抓取队列 URL 去重",
+      "difficulty": "medium",
+      "tags": ["url", "queues", "deduplication", "strings"],
+      "prompt": "实现 `deduplicate_urls(urls)`，在把链接交给并发抓取队列前完成规范化和有序去重。\n\n输入中的非空地址都是绝对 `http` 或 `https` URL。先去除两端空白和 `#fragment`，再把协议名与主机名转成小写；路径和查询串保持原样，尾部 `/` 也有意义。空字符串应忽略。\n\n返回第一次出现的每个规范 URL，顺序与输入一致。不得使用集合直接作为返回值，也不得发起网络请求。",
+      "function_name": "deduplicate_urls",
+      "signature": {
+        "parameters": [
+          {"name": "urls", "type": "list[str]"}
+        ],
+        "returns": "list[str]"
+      },
+      "starter_code": "def deduplicate_urls(urls: list[str]) -> list[str]:\n    return []\n",
+      "cases": [
+        {
+          "args": [[
+            " HTTPS://Example.COM/docs#intro ",
+            "https://example.com/docs#api",
+            "https://example.com/guide"
+          ]],
+          "expected": [
+            "https://example.com/docs",
+            "https://example.com/guide"
+          ],
+          "explanation": "主机大小写和片段差异不会产生新的抓取目标。"
+        },
+        {
+          "args": [[
+            "http://A.test/item?id=1",
+            "http://a.test/item?id=2",
+            "http://a.test/item?id=1#again"
+          ]],
+          "expected": [
+            "http://a.test/item?id=1",
+            "http://a.test/item?id=2"
+          ],
+          "explanation": "查询串参与去重键，片段不参与。"
+        },
+        {
+          "args": [["", "   ", "https://EXAMPLE.com", "https://example.com"]],
+          "expected": ["https://example.com"],
+          "explanation": "忽略空项并保留首个规范地址。"
+        }
+      ]
+    }
+  ]
+}

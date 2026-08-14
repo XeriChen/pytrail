@@ -1,0 +1,255 @@
+{
+  "course_slug": "databases-and-sql",
+  "exercises": [
+    {
+      "slug": "apply-record-mutations",
+      "lesson_source_path": "Day36-45/38.SQL详解之DML.md",
+      "title": "按顺序执行记录变更",
+      "difficulty": "medium",
+      "tags": ["sql", "dml", "records", "state"],
+      "prompt": "实现 `apply_mutations(records, mutations)`，用纯 Python 模拟一组按顺序执行的 DML 操作。初始记录和插入记录都包含唯一整数 `id`；变更有三种形式：`insert` 携带 `record`，`update` 携带 `id` 与 `changes`，`delete` 携带 `id`。\n\n`insert` 遇到已存在的 `id` 时忽略；`update` 和 `delete` 遇到不存在的 `id` 时忽略；更新中的 `id` 字段不可改变原主键。返回按 `id` 从小到大排列的新记录列表，不得修改传入的记录或变更对象。",
+      "function_name": "apply_mutations",
+      "signature": {
+        "parameters": [
+          {"name": "records", "type": "list[dict[str, object]]"},
+          {"name": "mutations", "type": "list[dict[str, object]]"}
+        ],
+        "returns": "list[dict[str, object]]"
+      },
+      "starter_code": "def apply_mutations(records: list[dict], mutations: list[dict]) -> list[dict]:\n    return []\n",
+      "cases": [
+        {
+          "args": [
+            [
+              {"id": 1, "name": "Ada", "score": 80},
+              {"id": 2, "name": "Lin", "score": 72}
+            ],
+            [
+              {"op": "update", "id": 1, "changes": {"score": 92}},
+              {"op": "delete", "id": 2},
+              {"op": "insert", "record": {"id": 3, "name": "Bo", "score": 88}}
+            ]
+          ],
+          "expected": [
+            {"id": 1, "name": "Ada", "score": 92},
+            {"id": 3, "name": "Bo", "score": 88}
+          ],
+          "explanation": "更新、删除和插入按照给定顺序依次生效。"
+        },
+        {
+          "args": [
+            [],
+            [
+              {"op": "insert", "record": {"id": 5, "name": "Eve"}},
+              {"op": "insert", "record": {"id": 2, "name": "Chen"}}
+            ]
+          ],
+          "expected": [
+            {"id": 2, "name": "Chen"},
+            {"id": 5, "name": "Eve"}
+          ],
+          "explanation": "返回结果始终按主键排序，而不是按插入顺序排序。"
+        },
+        {
+          "args": [
+            [{"id": 1, "name": "Old"}],
+            [
+              {"op": "insert", "record": {"id": 1, "name": "Duplicate"}},
+              {"op": "update", "id": 9, "changes": {"name": "Missing"}},
+              {"op": "delete", "id": 7},
+              {"op": "update", "id": 1, "changes": {"id": 99, "name": "New"}}
+            ]
+          ],
+          "expected": [{"id": 1, "name": "New"}],
+          "explanation": "重复插入和未知主键操作被忽略，更新也不能改写主键。"
+        }
+      ]
+    },
+    {
+      "slug": "grouped-sales-query",
+      "lesson_source_path": "Day36-45/39.SQL详解之DQL.md",
+      "title": "分组汇总销售记录",
+      "difficulty": "easy",
+      "tags": ["sql", "group-by", "aggregation", "sorting"],
+      "prompt": "实现 `group_sales(rows, minimum_total)`，模拟 `GROUP BY`、`HAVING` 和 `ORDER BY`。每条销售记录包含字符串 `category` 和整数 `amount`。按分类汇总 `total`（金额合计）与 `count`（记录数），只保留 `total >= minimum_total` 的分类。\n\n结果是字典列表，按 `total` 降序排列；合计相同时按 `category` 字典序升序排列。负金额表示退款，仍需参与合计；没有符合条件的分组时返回空列表。",
+      "function_name": "group_sales",
+      "signature": {
+        "parameters": [
+          {"name": "rows", "type": "list[dict[str, object]]"},
+          {"name": "minimum_total", "type": "int"}
+        ],
+        "returns": "list[dict[str, object]]"
+      },
+      "starter_code": "def group_sales(rows: list[dict], minimum_total: int) -> list[dict]:\n    return []\n",
+      "cases": [
+        {
+          "args": [
+            [
+              {"category": "book", "amount": 10},
+              {"category": "game", "amount": 30},
+              {"category": "book", "amount": 15},
+              {"category": "food", "amount": 8}
+            ],
+            20
+          ],
+          "expected": [
+            {"category": "game", "total": 30, "count": 1},
+            {"category": "book", "total": 25, "count": 2}
+          ],
+          "explanation": "先分组聚合，再按合计筛选和排序。"
+        },
+        {
+          "args": [
+            [
+              {"category": "beta", "amount": 7},
+              {"category": "alpha", "amount": 10},
+              {"category": "beta", "amount": 3}
+            ],
+            0
+          ],
+          "expected": [
+            {"category": "alpha", "total": 10, "count": 1},
+            {"category": "beta", "total": 10, "count": 2}
+          ],
+          "explanation": "合计相同的分类按名称升序排列。"
+        },
+        {
+          "args": [
+            [
+              {"category": "service", "amount": 20},
+              {"category": "service", "amount": -8},
+              {"category": "device", "amount": 5}
+            ],
+            15
+          ],
+          "expected": [],
+          "explanation": "退款参与求和后，没有分组达到最低合计。"
+        },
+        {
+          "args": [[], 1],
+          "expected": [],
+          "explanation": "空数据集不产生分组。"
+        }
+      ]
+    },
+    {
+      "slug": "department-dense-rank",
+      "lesson_source_path": "Day36-45/41.MySQL新特性.md",
+      "title": "部门薪资密集排名",
+      "difficulty": "medium",
+      "tags": ["sql", "window-functions", "ranking", "partitioning"],
+      "prompt": "实现 `dense_rank(employees)`，模拟 SQL 的 `DENSE_RANK()` 窗口函数。每位员工包含 `name`、`department` 和整数 `salary`。在每个部门内按薪资从高到低排名：相同薪资共享同一名次，下一种薪资只增加 1，不留下名次空缺。\n\n返回与输入顺序一致的新记录列表，每条记录包含原来的 `name`、`department`、`salary`，并新增整数 `rank`。不同部门独立排名；空列表返回空列表，不得修改输入记录。",
+      "function_name": "dense_rank",
+      "signature": {
+        "parameters": [
+          {"name": "employees", "type": "list[dict[str, object]]"}
+        ],
+        "returns": "list[dict[str, object]]"
+      },
+      "starter_code": "def dense_rank(employees: list[dict]) -> list[dict]:\n    return []\n",
+      "cases": [
+        {
+          "args": [[
+            {"name": "Ada", "department": "R&D", "salary": 100},
+            {"name": "Bo", "department": "Sales", "salary": 50},
+            {"name": "Chen", "department": "R&D", "salary": 90},
+            {"name": "Dora", "department": "R&D", "salary": 90},
+            {"name": "Eve", "department": "Sales", "salary": 50},
+            {"name": "Fang", "department": "R&D", "salary": 80}
+          ]],
+          "expected": [
+            {"name": "Ada", "department": "R&D", "salary": 100, "rank": 1},
+            {"name": "Bo", "department": "Sales", "salary": 50, "rank": 1},
+            {"name": "Chen", "department": "R&D", "salary": 90, "rank": 2},
+            {"name": "Dora", "department": "R&D", "salary": 90, "rank": 2},
+            {"name": "Eve", "department": "Sales", "salary": 50, "rank": 1},
+            {"name": "Fang", "department": "R&D", "salary": 80, "rank": 3}
+          ],
+          "explanation": "部门分别排名，同薪员工并列且下一名不跳号。"
+        },
+        {
+          "args": [[
+            {"name": "A", "department": "Lab", "salary": -10},
+            {"name": "B", "department": "Lab", "salary": 0},
+            {"name": "C", "department": "Lab", "salary": -10}
+          ]],
+          "expected": [
+            {"name": "A", "department": "Lab", "salary": -10, "rank": 2},
+            {"name": "B", "department": "Lab", "salary": 0, "rank": 1},
+            {"name": "C", "department": "Lab", "salary": -10, "rank": 2}
+          ],
+          "explanation": "零和负数薪资仍按数值从高到低排名。"
+        },
+        {
+          "args": [[]],
+          "expected": [],
+          "explanation": "空输入直接返回空列表。"
+        }
+      ]
+    },
+    {
+      "slug": "aggregate-event-log",
+      "lesson_source_path": "Day36-45/45.Hive实战.md",
+      "title": "按日期聚合事件日志",
+      "difficulty": "hard",
+      "tags": ["hive", "aggregation", "logs", "dictionaries"],
+      "prompt": "实现 `aggregate_events(events)`，模拟对事件明细表进行 Hive 分组聚合。每条事件包含字符串 `day`、`user`、`kind` 和非负整数 `duration`。按 `day` 汇总：`event_count` 为事件总数，`unique_users` 为去重用户数，`total_duration` 为时长合计，`by_kind` 为每种事件的数量。\n\n返回按 `day` 字典序升序排列的结果列表；`by_kind` 只包含当天实际出现的类型。相同用户在同一天出现多次只计作一个独立用户，在不同日期则分别统计；空输入返回空列表。",
+      "function_name": "aggregate_events",
+      "signature": {
+        "parameters": [
+          {"name": "events", "type": "list[dict[str, object]]"}
+        ],
+        "returns": "list[dict[str, object]]"
+      },
+      "starter_code": "def aggregate_events(events: list[dict]) -> list[dict]:\n    return []\n",
+      "cases": [
+        {
+          "args": [[
+            {"day": "2026-08-02", "user": "u1", "kind": "view", "duration": 3},
+            {"day": "2026-08-01", "user": "u1", "kind": "view", "duration": 5},
+            {"day": "2026-08-01", "user": "u2", "kind": "click", "duration": 2},
+            {"day": "2026-08-01", "user": "u1", "kind": "click", "duration": 4}
+          ]],
+          "expected": [
+            {
+              "day": "2026-08-01",
+              "event_count": 3,
+              "unique_users": 2,
+              "total_duration": 11,
+              "by_kind": {"view": 1, "click": 2}
+            },
+            {
+              "day": "2026-08-02",
+              "event_count": 1,
+              "unique_users": 1,
+              "total_duration": 3,
+              "by_kind": {"view": 1}
+            }
+          ],
+          "explanation": "输入无需按日期排序，用户去重范围限定在单日内。"
+        },
+        {
+          "args": [[
+            {"day": "2026-01-01", "user": "same", "kind": "idle", "duration": 0},
+            {"day": "2026-01-01", "user": "same", "kind": "idle", "duration": 0}
+          ]],
+          "expected": [
+            {
+              "day": "2026-01-01",
+              "event_count": 2,
+              "unique_users": 1,
+              "total_duration": 0,
+              "by_kind": {"idle": 2}
+            }
+          ],
+          "explanation": "重复用户只计一次，但其每条事件都参与事件数和时长聚合。"
+        },
+        {
+          "args": [[]],
+          "expected": [],
+          "explanation": "没有事件时不生成日期汇总。"
+        }
+      ]
+    }
+  ]
+}

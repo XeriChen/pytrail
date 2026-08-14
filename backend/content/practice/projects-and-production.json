@@ -1,0 +1,227 @@
+{
+  "course_slug": "projects-and-production",
+  "exercises": [
+    {
+      "slug": "clean-api-payload",
+      "lesson_source_path": "Day91-100/94.网络API接口设计.md",
+      "title": "递归清理 API 响应",
+      "difficulty": "medium",
+      "tags": ["api", "json", "recursion", "data-cleaning"],
+      "prompt": "实现 `clean_payload(payload)`，递归移除 API 响应中的空值。\n\n输入根节点保证是字典。遍历任意层级的字典和列表：字典中值为 `None` 的键要删除，列表中值为 `None` 的元素要删除；其余字典值和列表元素继续递归清理。空字典、空列表、`False`、`0` 和空字符串都必须保留，不能把它们误当成空值。\n\n保持字典键和列表元素的原顺序，返回新的 JSON 安全结构。",
+      "function_name": "clean_payload",
+      "signature": {
+        "parameters": [
+          {"name": "payload", "type": "dict[str, object]"}
+        ],
+        "returns": "dict[str, object]"
+      },
+      "starter_code": "def clean_payload(payload: dict[str, object]) -> dict[str, object]:\n    return {}\n",
+      "cases": [
+        {
+          "args": [{
+            "id": 7,
+            "name": "Ada",
+            "profile": {"email": null, "city": "成都"},
+            "roles": ["editor", null]
+          }],
+          "expected": {
+            "id": 7,
+            "name": "Ada",
+            "profile": {"city": "成都"},
+            "roles": ["editor"]
+          },
+          "explanation": "同时清理嵌套字典字段和列表元素。"
+        },
+        {
+          "args": [{
+            "meta": null,
+            "items": [
+              {"sku": "A", "discount": null},
+              {"sku": "B", "discount": 0}
+            ],
+            "empty": {"value": null}
+          }],
+          "expected": {
+            "items": [
+              {"sku": "A"},
+              {"sku": "B", "discount": 0}
+            ],
+            "empty": {}
+          },
+          "explanation": "清理后为空的容器仍然保留，数值零也保留。"
+        },
+        {
+          "args": [{
+            "active": false,
+            "count": 0,
+            "note": "",
+            "nested": [null, [1, null, 2]]
+          }],
+          "expected": {
+            "active": false,
+            "count": 0,
+            "note": "",
+            "nested": [[1, 2]]
+          },
+          "explanation": "只有 None 被移除，其他假值保持不变。"
+        }
+      ]
+    },
+    {
+      "slug": "merge-shopping-carts",
+      "lesson_source_path": "Day91-100/97.电商网站技术要点剖析.md",
+      "title": "合并登录前后购物车",
+      "difficulty": "medium",
+      "tags": ["ecommerce", "dictionaries", "aggregation"],
+      "prompt": "实现 `merge_carts(server_items, local_items)`，合并用户登录前后的购物车。\n\n每个商品项包含字符串 `sku`、正整数 `amount` 和布尔值 `selected`。相同 `sku` 的数量相加，只要任意一条记录被选中，合并结果就标记为选中。先按服务端商品首次出现的顺序输出，再追加只在本地购物车出现的商品；同一输入中重复的 SKU 也按相同规则合并。\n\n每个输出项只包含 `sku`、`amount`、`selected`，不要修改输入列表。",
+      "function_name": "merge_carts",
+      "signature": {
+        "parameters": [
+          {"name": "server_items", "type": "list[dict[str, object]]"},
+          {"name": "local_items", "type": "list[dict[str, object]]"}
+        ],
+        "returns": "list[dict[str, object]]"
+      },
+      "starter_code": "def merge_carts(server_items: list[dict[str, object]], local_items: list[dict[str, object]]) -> list[dict[str, object]]:\n    return []\n",
+      "cases": [
+        {
+          "args": [
+            [
+              {"sku": "A", "amount": 2, "selected": false},
+              {"sku": "B", "amount": 1, "selected": true}
+            ],
+            [
+              {"sku": "A", "amount": 1, "selected": true},
+              {"sku": "C", "amount": 2, "selected": false}
+            ]
+          ],
+          "expected": [
+            {"sku": "A", "amount": 3, "selected": true},
+            {"sku": "B", "amount": 1, "selected": true},
+            {"sku": "C", "amount": 2, "selected": false}
+          ],
+          "explanation": "相同 SKU 累加数量，本地新品追加在服务端商品之后。"
+        },
+        {
+          "args": [
+            [],
+            [
+              {"sku": "X", "amount": 1, "selected": false},
+              {"sku": "X", "amount": 2, "selected": true}
+            ]
+          ],
+          "expected": [
+            {"sku": "X", "amount": 3, "selected": true}
+          ],
+          "explanation": "单个购物车内的重复商品也需要合并。"
+        },
+        {
+          "args": [
+            [{"sku": "S", "amount": 4, "selected": false}],
+            []
+          ],
+          "expected": [
+            {"sku": "S", "amount": 4, "selected": false}
+          ],
+          "explanation": "本地购物车为空时保持服务端商品。"
+        },
+        {
+          "args": [[], []],
+          "expected": [],
+          "explanation": "两个空购物车合并后仍为空。"
+        }
+      ]
+    },
+    {
+      "slug": "weighted-round-robin",
+      "lesson_source_path": "Day91-100/98.项目部署上线和性能调优.md",
+      "title": "平滑加权轮询调度",
+      "difficulty": "hard",
+      "tags": ["load-balancing", "scheduling", "algorithms"],
+      "prompt": "实现 `weighted_schedule(servers, rounds)`，生成平滑加权轮询（Smooth Weighted Round Robin）调度序列。\n\n每个服务器包含唯一字符串 `name` 和正整数 `weight`。为每台服务器维护初始为 0 的当前权重；每轮先给所有当前权重加上各自配置权重，选择当前权重最大的服务器，再从它的当前权重减去总配置权重。并列时选择输入位置靠前的服务器。\n\n返回连续 `rounds` 轮选中的服务器名。`rounds` 为非负整数；为 0 时返回空列表。不要修改输入数据。",
+      "function_name": "weighted_schedule",
+      "signature": {
+        "parameters": [
+          {"name": "servers", "type": "list[dict[str, object]]"},
+          {"name": "rounds", "type": "int"}
+        ],
+        "returns": "list[str]"
+      },
+      "starter_code": "def weighted_schedule(servers: list[dict[str, object]], rounds: int) -> list[str]:\n    return []\n",
+      "cases": [
+        {
+          "args": [
+            [
+              {"name": "api", "weight": 2},
+              {"name": "worker", "weight": 1}
+            ],
+            6
+          ],
+          "expected": ["api", "worker", "api", "api", "worker", "api"],
+          "explanation": "权重 2:1 的调度在每三个请求中分配两次 api。"
+        },
+        {
+          "args": [
+            [
+              {"name": "a", "weight": 5},
+              {"name": "b", "weight": 1},
+              {"name": "c", "weight": 1}
+            ],
+            7
+          ],
+          "expected": ["a", "a", "b", "a", "c", "a", "a"],
+          "explanation": "平滑算法把低权重服务器分散到一个完整周期中。"
+        },
+        {
+          "args": [[{"name": "solo", "weight": 3}], 3],
+          "expected": ["solo", "solo", "solo"],
+          "explanation": "只有一个服务器时每轮都选中它。"
+        },
+        {
+          "args": [[{"name": "idle", "weight": 1}], 0],
+          "expected": [],
+          "explanation": "零轮调度不产生结果。"
+        }
+      ]
+    },
+    {
+      "slug": "batch-iterable",
+      "lesson_source_path": "Day91-100/93.MySQL性能优化.md",
+      "title": "拆分批处理数据",
+      "difficulty": "easy",
+      "tags": ["batching", "lists", "performance"],
+      "prompt": "实现 `batch_items(items, size)`，把待处理数据按固定大小拆成连续批次。\n\n`size` 保证为正整数。每个完整批次包含 `size` 个元素，最后不足一批的元素仍需返回；输入为空时返回空列表。元素可以是任意 JSON 安全值，必须保持原顺序和嵌套结构。\n\n返回新的二维列表，不要修改原列表。这个函数可用于把大批量数据库或 API 操作控制在稳定的批次大小。",
+      "function_name": "batch_items",
+      "signature": {
+        "parameters": [
+          {"name": "items", "type": "list[object]"},
+          {"name": "size", "type": "int"}
+        ],
+        "returns": "list[list[object]]"
+      },
+      "starter_code": "def batch_items(items: list[object], size: int) -> list[list[object]]:\n    return []\n",
+      "cases": [
+        {
+          "args": [[1, 2, 3, 4, 5], 2],
+          "expected": [[1, 2], [3, 4], [5]],
+          "explanation": "末尾不足 size 的元素形成最后一个批次。"
+        },
+        {
+          "args": [[], 3],
+          "expected": [],
+          "explanation": "空输入没有批次。"
+        },
+        {
+          "args": [[{"id": 1}, {"id": 2}], 5],
+          "expected": [[{"id": 1}, {"id": 2}]],
+          "explanation": "批次大小大于数据量时只返回一个批次。"
+        },
+        {
+          "args": [["a", "b", "c"], 1],
+          "expected": [["a"], ["b"], ["c"]],
+          "explanation": "批次大小为 1 时每个元素独立成批。"
+        }
+      ]
+    }
+  ]
+}

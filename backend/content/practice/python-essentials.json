@@ -1,0 +1,161 @@
+{
+  "course_slug": "python-essentials",
+  "exercises": [
+    {
+      "slug": "parse-number-lines",
+      "lesson_source_path": "Day21-30/21.文件读写和异常处理.md",
+      "title": "解析数字文本行",
+      "difficulty": "easy",
+      "tags": ["strings", "exceptions", "data-cleaning"],
+      "prompt": "实现 `parse_number_lines(lines)`，模拟读取文本文件后的数据清洗。逐行去除首尾空白：空行直接忽略；可由 `int()` 转换的行加入 `numbers`；无法转换的非空行以清洗后的原文加入 `invalid`。同时返回有效整数之和 `total`。\n\n保持 `numbers` 和 `invalid` 的原始顺序；没有有效数字时总和为 `0`。函数只处理传入的数据，不执行真实文件读写。",
+      "function_name": "parse_number_lines",
+      "signature": {
+        "parameters": [
+          {"name": "lines", "type": "list[str]"}
+        ],
+        "returns": "dict[str, object]"
+      },
+      "starter_code": "def parse_number_lines(lines: list[str]) -> dict:\n    return {\"numbers\": [], \"invalid\": [], \"total\": 0}\n",
+      "cases": [
+        {
+          "args": [[" 12 ", "-3", "", "oops", "+5"]],
+          "expected": {"numbers": [12, -3, 5], "invalid": ["oops"], "total": 14},
+          "explanation": "首尾空白被清理，空行被忽略，带正负号的整数有效。"
+        },
+        {
+          "args": [["0", "  007 ", "3.5"]],
+          "expected": {"numbers": [0, 7], "invalid": ["3.5"], "total": 7},
+          "explanation": "整数形式的前导零可转换，小数文本按无效行处理。"
+        },
+        {
+          "args": [[" ", "bad", "1e3"]],
+          "expected": {"numbers": [], "invalid": ["bad", "1e3"], "total": 0},
+          "explanation": "科学计数法不是本题接受的整数文本。"
+        },
+        {
+          "args": [[]],
+          "expected": {"numbers": [], "invalid": [], "total": 0},
+          "explanation": "空输入返回三个字段的空汇总。"
+        }
+      ]
+    },
+    {
+      "slug": "normalize-user-json",
+      "lesson_source_path": "Day21-30/22.对象的序列化和反序列化.md",
+      "title": "规范化用户 JSON",
+      "difficulty": "medium",
+      "tags": ["json", "dictionaries", "normalization"],
+      "prompt": "实现 `normalize_user(payload)`，把反序列化后的用户对象规范为只包含 `name`、`email`、`roles`、`active` 四个字段的新字典。\n\n- `name` 和 `email` 仅在原值为字符串时使用，否则视为空字符串；二者去除首尾空白，`email` 还要转为小写。\n- `roles` 仅在原值为列表时处理：保留其中的字符串，将每项去除首尾空白并转为小写，忽略空项，按首次出现顺序去重。\n- `active` 仅接受布尔值；缺失或类型不符时默认为 `true`。\n- 忽略其他字段，且不得修改输入字典。",
+      "function_name": "normalize_user",
+      "signature": {
+        "parameters": [
+          {"name": "payload", "type": "dict[str, object]"}
+        ],
+        "returns": "dict[str, object]"
+      },
+      "starter_code": "def normalize_user(payload: dict) -> dict:\n    return {\"name\": \"\", \"email\": \"\", \"roles\": [], \"active\": True}\n",
+      "cases": [
+        {
+          "args": [{"name": " Ada Lovelace ", "email": " ADA@Example.COM ", "roles": ["Admin", " editor ", "ADMIN", ""], "active": false, "token": "secret"}],
+          "expected": {"name": "Ada Lovelace", "email": "ada@example.com", "roles": ["admin", "editor"], "active": false},
+          "explanation": "字段被清洗、角色按首次出现去重，额外字段被丢弃。"
+        },
+        {
+          "args": [{"name": "Lin", "email": "LIN@LOCAL.TEST", "roles": ["Viewer", 7, " viewer "]}],
+          "expected": {"name": "Lin", "email": "lin@local.test", "roles": ["viewer"], "active": true},
+          "explanation": "非字符串角色被忽略，缺失的 active 使用默认值。"
+        },
+        {
+          "args": [{"name": 42, "email": null, "roles": "admin", "active": 1}],
+          "expected": {"name": "", "email": "", "roles": [], "active": true},
+          "explanation": "类型不符的字段采用约定的安全默认值。"
+        },
+        {
+          "args": [{}],
+          "expected": {"name": "", "email": "", "roles": [], "active": true},
+          "explanation": "空对象也会产生完整且稳定的输出结构。"
+        }
+      ]
+    },
+    {
+      "slug": "summarize-csv-rows",
+      "lesson_source_path": "Day21-30/23.Python读写CSV文件.md",
+      "title": "汇总 CSV 数据行",
+      "difficulty": "medium",
+      "tags": ["csv", "aggregation", "data-cleaning"],
+      "prompt": "实现 `summarize_rows(rows)`，处理已经解析成字典的 CSV 数据。每行应包含字符串字段 `category` 和 `amount`：先去除两者首尾空白，分类不能为空，金额必须能由 `int()` 转换。有效行按分类累加到 `totals`，并计入 `valid_rows`；缺少字段、分类为空或金额无效的行计入 `invalid_rows`。\n\n分类保留原有大小写，负金额允许参与汇总；空列表返回空的 `totals` 和两个零计数。函数不执行真实文件读写。",
+      "function_name": "summarize_rows",
+      "signature": {
+        "parameters": [
+          {"name": "rows", "type": "list[dict[str, str]]"}
+        ],
+        "returns": "dict[str, object]"
+      },
+      "starter_code": "def summarize_rows(rows: list[dict[str, str]]) -> dict:\n    return {\"totals\": {}, \"valid_rows\": 0, \"invalid_rows\": 0}\n",
+      "cases": [
+        {
+          "args": [[{"category": "Books", "amount": "12"}, {"category": " Games ", "amount": " 8 "}, {"category": "Books", "amount": "5"}, {"category": "Books", "amount": "4.5"}]],
+          "expected": {"totals": {"Books": 17, "Games": 8}, "valid_rows": 3, "invalid_rows": 1},
+          "explanation": "相同分类累加，无法转换为整数的金额记作无效。"
+        },
+        {
+          "args": [[{"category": "A", "amount": "10"}, {"category": "A", "amount": "-10"}, {"category": "", "amount": "3"}, {"amount": "9"}]],
+          "expected": {"totals": {"A": 0}, "valid_rows": 2, "invalid_rows": 2},
+          "explanation": "负金额有效，空分类和缺少分类字段的行无效。"
+        },
+        {
+          "args": [[]],
+          "expected": {"totals": {}, "valid_rows": 0, "invalid_rows": 0},
+          "explanation": "空数据集返回空汇总。"
+        }
+      ]
+    },
+    {
+      "slug": "validate-contact-fields",
+      "lesson_source_path": "Day21-30/30.正则表达式的应用.md",
+      "title": "校验联系人字段",
+      "difficulty": "medium",
+      "tags": ["validation", "strings", "regular-expressions"],
+      "prompt": "实现 `validate_contacts(contacts)`，按输入顺序返回每位联系人的校验结果。每条输入包含字符串 `name`、`phone`、`email`，三个值都先去除首尾空白，输出项只包含清洗后的 `name`、`phone_valid` 和 `email_valid`。\n\n手机号有效条件：恰好 11 位数字，以 `1` 开头，第二位是 `3` 到 `9`。邮箱有效条件：不含任何空白、恰好一个 `@`，两侧非空，域名部分至少含一个点且点不在域名首尾。空列表返回空列表。不要导入正则库，使用字符串操作完成同等校验。",
+      "function_name": "validate_contacts",
+      "signature": {
+        "parameters": [
+          {"name": "contacts", "type": "list[dict[str, str]]"}
+        ],
+        "returns": "list[dict[str, object]]"
+      },
+      "starter_code": "def validate_contacts(contacts: list[dict[str, str]]) -> list[dict]:\n    return []\n",
+      "cases": [
+        {
+          "args": [[{"name": " Alice ", "phone": "13800138000", "email": "alice@example.com"}, {"name": "Bob", "phone": "12800138000", "email": "bob@example"}]],
+          "expected": [
+            {"name": "Alice", "phone_valid": true, "email_valid": true},
+            {"name": "Bob", "phone_valid": false, "email_valid": false}
+          ],
+          "explanation": "第二位不在允许范围内的手机号无效，邮箱域名必须含点。"
+        },
+        {
+          "args": [[{"name": "Carol", "phone": " 19912345678 ", "email": " carol@sub.example.org "}, {"name": "Dan", "phone": "1380013800x", "email": "d an@example.com"}]],
+          "expected": [
+            {"name": "Carol", "phone_valid": true, "email_valid": true},
+            {"name": "Dan", "phone_valid": false, "email_valid": false}
+          ],
+          "explanation": "首尾空白会被清理，但字段内部的非数字或空白会导致校验失败。"
+        },
+        {
+          "args": [[{"name": "Eve", "phone": "13123456789", "email": "@example.com"}, {"name": "Fox", "phone": "18123456789", "email": "fox@example.com@extra.org"}]],
+          "expected": [
+            {"name": "Eve", "phone_valid": true, "email_valid": false},
+            {"name": "Fox", "phone_valid": true, "email_valid": false}
+          ],
+          "explanation": "邮箱本地部分不能为空，且只能有一个 @。"
+        },
+        {
+          "args": [[]],
+          "expected": [],
+          "explanation": "没有联系人时返回空列表。"
+        }
+      ]
+    }
+  ]
+}

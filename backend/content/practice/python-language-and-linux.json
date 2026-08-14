@@ -1,0 +1,158 @@
+{
+  "course_slug": "python-language-and-linux",
+  "exercises": [
+    {
+      "slug": "binary-search-position",
+      "lesson_source_path": "Day31-35/31.Python语言进阶.md",
+      "title": "二分查找左端位置",
+      "difficulty": "easy",
+      "tags": ["algorithms", "binary-search", "lists"],
+      "prompt": "实现 `binary_search(values, target)`，在按非递减顺序排列的整数列表中查找 `target`，返回它第一次出现的索引。若目标不存在，返回 `-1`。\n\n列表可能包含重复值，也可能为空。请使用二分查找逐步缩小区间，不得调用 `list.index()`。",
+      "function_name": "binary_search",
+      "signature": {
+        "parameters": [
+          {"name": "values", "type": "list[int]"},
+          {"name": "target", "type": "int"}
+        ],
+        "returns": "int"
+      },
+      "starter_code": "def binary_search(values: list[int], target: int) -> int:\n    return -1\n",
+      "cases": [
+        {
+          "args": [[1, 3, 5, 7, 9], 7],
+          "expected": 3,
+          "explanation": "目标位于有序列表的中后部。"
+        },
+        {
+          "args": [[1, 2, 2, 2, 4], 2],
+          "expected": 1,
+          "explanation": "存在重复值时返回最左侧索引。"
+        },
+        {
+          "args": [[-8, -3, 0, 6], 5],
+          "expected": -1,
+          "explanation": "目标不在列表中。"
+        },
+        {
+          "args": [[], 10],
+          "expected": -1,
+          "explanation": "空列表中不存在任何目标。"
+        }
+      ]
+    },
+    {
+      "slug": "merge-overlapping-ranges",
+      "lesson_source_path": "Day31-35/31.Python语言进阶.md",
+      "title": "合并重叠区间",
+      "difficulty": "medium",
+      "tags": ["algorithms", "sorting", "intervals"],
+      "prompt": "实现 `merge_ranges(ranges)`，合并一组无序的闭区间。每个区间表示为 `[start, end]`，并保证 `start <= end`。两个区间发生重叠或共享端点时应合并，结果按起点从小到大排列。\n\n例如 `[1, 4]` 与 `[4, 6]` 合并为 `[1, 6]`，但 `[1, 2]` 与 `[3, 4]` 不合并。不得修改输入列表；空输入返回空列表。",
+      "function_name": "merge_ranges",
+      "signature": {
+        "parameters": [
+          {"name": "ranges", "type": "list[list[int]]"}
+        ],
+        "returns": "list[list[int]]"
+      },
+      "starter_code": "def merge_ranges(ranges: list[list[int]]) -> list[list[int]]:\n    return []\n",
+      "cases": [
+        {
+          "args": [[[5, 8], [1, 3], [2, 6], [10, 12]]],
+          "expected": [[1, 8], [10, 12]],
+          "explanation": "输入无序，前三个区间经连续重叠合并。"
+        },
+        {
+          "args": [[[1, 4], [4, 5], [8, 9]]],
+          "expected": [[1, 5], [8, 9]],
+          "explanation": "共享端点的闭区间需要合并。"
+        },
+        {
+          "args": [[[3, 3], [-2, 0], [1, 2]]],
+          "expected": [[-2, 0], [1, 2], [3, 3]],
+          "explanation": "不重叠的区间只排序，不因整数相邻而合并。"
+        },
+        {
+          "args": [[]],
+          "expected": [],
+          "explanation": "空输入返回空列表。"
+        }
+      ]
+    },
+    {
+      "slug": "css-specificity",
+      "lesson_source_path": "Day31-35/32-33.Web前端入门.md",
+      "title": "计算 CSS 选择器优先级",
+      "difficulty": "hard",
+      "tags": ["css", "parsing", "strings"],
+      "prompt": "实现 `selector_specificity(selector)`，计算一个简化 CSS 选择器的优先级，返回 `[id_count, class_count, type_count]`。输入只包含一条选择器链，不含逗号、转义或函数式伪类；复合选择器可由空白、`>`、`+`、`~` 分隔。\n\n计数规则：`#id` 计入 ID；`.class`、`[attribute]` 和单冒号伪类（如 `:hover`）计入 class；元素名和双冒号伪元素（如 `::before`）计入 type；通配符 `*` 不计分。选择器保证符合上述简化语法。",
+      "function_name": "selector_specificity",
+      "signature": {
+        "parameters": [
+          {"name": "selector", "type": "str"}
+        ],
+        "returns": "list[int]"
+      },
+      "starter_code": "def selector_specificity(selector: str) -> list[int]:\n    return [0, 0, 0]\n",
+      "cases": [
+        {
+          "args": ["#app .card > h2.title"],
+          "expected": [1, 2, 1],
+          "explanation": "一个 ID、两个类和一个元素名。"
+        },
+        {
+          "args": ["main[data-theme] a:hover"],
+          "expected": [0, 2, 2],
+          "explanation": "属性与伪类计入 class，main 与 a 计入 type。"
+        },
+        {
+          "args": ["article::before"],
+          "expected": [0, 0, 2],
+          "explanation": "元素名和伪元素各计一个 type。"
+        },
+        {
+          "args": ["* .notice + button[disabled]"],
+          "expected": [0, 2, 1],
+          "explanation": "通配符不计分，类和属性计入 class，button 计入 type。"
+        }
+      ]
+    },
+    {
+      "slug": "unix-permission-mode",
+      "lesson_source_path": "Day31-35/34-35.玩转Linux操作系统.md",
+      "title": "转换 Unix 权限模式",
+      "difficulty": "easy",
+      "tags": ["linux", "permissions", "strings"],
+      "prompt": "实现 `permission_mode(permissions)`，把九位 Unix 权限字符串转换成三位八进制模式字符串。每组三位依次代表读、写、执行权限，权重分别为 `4`、`2`、`1`。\n\n输入必须恰好九位，并且每个位置只能是该位置对应的 `r`、`w`、`x` 或 `-`；否则返回空字符串。只需处理普通 `rwx` 权限，不处理 `s`、`S`、`t`、`T` 等特殊位。",
+      "function_name": "permission_mode",
+      "signature": {
+        "parameters": [
+          {"name": "permissions", "type": "str"}
+        ],
+        "returns": "str"
+      },
+      "starter_code": "def permission_mode(permissions: str) -> str:\n    return \"\"\n",
+      "cases": [
+        {
+          "args": ["rwxr-x---"],
+          "expected": "750",
+          "explanation": "所有者为 7，同组用户为 5，其他用户为 0。"
+        },
+        {
+          "args": ["rw-r--r--"],
+          "expected": "644",
+          "explanation": "常见普通文件权限。"
+        },
+        {
+          "args": ["---------"],
+          "expected": "000",
+          "explanation": "没有任何权限时每组都为 0。"
+        },
+        {
+          "args": ["rwxr-sr-x"],
+          "expected": "",
+          "explanation": "本题不接受特殊权限位。"
+        }
+      ]
+    }
+  ]
+}
