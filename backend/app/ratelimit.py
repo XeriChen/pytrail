@@ -38,3 +38,4 @@ class InMemoryRateLimiter:
 
 
 auth_limiter = InMemoryRateLimiter(limit=5, window_seconds=60.0)
+practice_limiter = InMemoryRateLimiter(limit=20, window_seconds=60.0)

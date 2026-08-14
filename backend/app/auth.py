@@ -74,9 +74,7 @@ def create_token(user_id: int) -> str:
     return jwt.encode({"sub": str(user_id), "exp": expires}, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def current_user(credentials: HTTPAuthorizationCredentials | None = Depends(bearer), db: Session = Depends(get_db)) -> User:
-    if not credentials:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+def _user_from_credentials(credentials: HTTPAuthorizationCredentials, db: Session) -> User:
     try:
         payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = int(payload.get("sub", ""))
@@ -86,3 +84,19 @@ def current_user(credentials: HTTPAuthorizationCredentials | None = Depends(bear
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     return user
+
+
+def optional_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+    db: Session = Depends(get_db),
+) -> User | None:
+    return _user_from_credentials(credentials, db) if credentials else None
+
+
+def current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+    db: Session = Depends(get_db),
+) -> User:
+    if not credentials:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    return _user_from_credentials(credentials, db)

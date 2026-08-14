@@ -33,8 +33,8 @@ from app.auth import (  # noqa: E402
 from app.database import SessionLocal, engine  # noqa: E402
 from app.main import app  # noqa: E402
 from app.metrics import compute_streak  # noqa: E402
-from app.models import Progress  # noqa: E402
-from app.ratelimit import auth_limiter  # noqa: E402
+from app.models import Exercise, Progress  # noqa: E402
+from app.ratelimit import auth_limiter, practice_limiter  # noqa: E402
 
 _EMAILS = count(1)
 
@@ -57,6 +57,7 @@ class ApiTests(unittest.TestCase):
 
     def setUp(self) -> None:
         auth_limiter.reset()
+        practice_limiter.reset()
 
     def register(self, email: str | None = None, password: str = "password123", name: str = "Ada") -> dict:
         payload = {"name": name, "email": email or unique_email(), "password": password}
@@ -97,6 +98,68 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(payload["course_slug"], "python-foundations")
         self.assertTrue(payload["asset_base_url"].endswith("/python-foundations/"))
         self.assertTrue(payload["exercises"])
+
+    def test_public_practice_catalog_detail_and_filters(self) -> None:
+        response = self.client.get("/api/practice/exercises")
+        self.assertEqual(response.status_code, 200, response.text)
+        catalog = response.json()
+        self.assertEqual(catalog["total"], 36)
+        self.assertEqual(len(catalog["items"]), 12)
+        self.assertEqual(catalog["items"][0]["slug"], "prime-range-summary")
+        self.assertIsNone(catalog["items"][0]["progress"])
+        self.assertEqual(len(catalog["facets"]["courses"]), 9)
+
+        filtered = self.client.get("/api/practice/exercises", params={"course": "python-foundations", "difficulty": "easy", "tag": "loops", "page_size": 48})
+        self.assertEqual(filtered.status_code, 200, filtered.text)
+        self.assertGreater(filtered.json()["total"], 0)
+        self.assertTrue(all(item["course"]["slug"] == "python-foundations" for item in filtered.json()["items"]))
+
+        detail = self.client.get("/api/practice/exercises/prime-range-summary")
+        self.assertEqual(detail.status_code, 200, detail.text)
+        payload = detail.json()
+        self.assertEqual(payload["function_name"], "prime_summary")
+        self.assertEqual(len(payload["cases"]), 4)
+        self.assertIn("expected", payload["cases"][0])
+        self.assertNotIn("expected_answer", payload)
+        self.assertEqual(self.client.get("/api/practice/exercises/not-found").status_code, 404)
+        self.assertEqual(self.client.get("/api/practice/exercises", params={"difficulty": "expert"}).status_code, 422)
+        self.assertEqual(self.client.get("/api/practice/exercises", params={"status": "passed"}).status_code, 401)
+
+    def test_practice_run_requires_auth_and_persists_monotonic_progress(self) -> None:
+        slug = "filter-and-square"
+        self.assertEqual(self.client.post(f"/api/practice/exercises/{slug}/run", json={"code": "def x(): pass"}).status_code, 401)
+        auth = self.register()
+        failed_code = "def filter_and_square(numbers, minimum):\n    return []\n"
+        failed = self.client.post(f"/api/practice/exercises/{slug}/run", headers=auth["headers"], json={"code": failed_code})
+        self.assertEqual(failed.status_code, 200, failed.text)
+        self.assertFalse(failed.json()["passed"])
+        self.assertEqual(failed.json()["progress"]["status"], "in_progress")
+        self.assertEqual(failed.json()["progress"]["attempts"], 1)
+
+        passed_code = "def filter_and_square(numbers, minimum):\n    return [value * value for value in numbers if value >= minimum]\n"
+        passed = self.client.post(f"/api/practice/exercises/{slug}/run", headers=auth["headers"], json={"code": passed_code})
+        self.assertEqual(passed.status_code, 200, passed.text)
+        self.assertTrue(passed.json()["passed"], passed.text)
+        self.assertEqual(passed.json()["progress"]["status"], "passed")
+
+        again = self.client.post(f"/api/practice/exercises/{slug}/run", headers=auth["headers"], json={"code": failed_code})
+        self.assertEqual(again.json()["progress"]["status"], "passed")
+        self.assertEqual(again.json()["progress"]["attempts"], 3)
+        resumed = self.client.get(f"/api/practice/exercises/{slug}", headers=auth["headers"]).json()
+        self.assertEqual(resumed["starter_code"], failed_code)
+        self.assertEqual(resumed["progress"]["last_code"], failed_code)
+
+        status = self.client.get("/api/practice/exercises", headers=auth["headers"], params={"status": "passed", "page_size": 48})
+        self.assertEqual(status.status_code, 200, status.text)
+        self.assertIn(slug, [item["slug"] for item in status.json()["items"]])
+
+    def test_legacy_submit_rejects_function_exercises(self) -> None:
+        auth = self.register()
+        with SessionLocal() as db:
+            exercise = db.scalar(select(Exercise).where(Exercise.kind == "function"))
+            exercise_id = exercise.id
+        response = self.client.post(f"/api/exercises/{exercise_id}/submit", headers=auth["headers"], json={"answer": "x"})
+        self.assertEqual(response.status_code, 404)
 
     def test_catalog_errors_and_assets_are_safe(self) -> None:
         self.assertEqual(self.client.get("/api/courses/999999").status_code, 404)

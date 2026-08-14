@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 import sys
@@ -5,18 +6,20 @@ import mimetypes
 from pathlib import Path
 from urllib.parse import unquote
 from contextlib import asynccontextmanager
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, load_only, selectinload
-from .auth import create_token, current_user, enforce_secret_key_policy, hash_password, verify_password
+from .auth import create_token, current_user, enforce_secret_key_policy, hash_password, optional_current_user, verify_password
 from .database import Base, SessionLocal, engine, get_db
 from .metrics import as_utc_date, compute_streak
 from .models import Course, Exercise, Lesson, Progress, User
-from .ratelimit import auth_limiter
+from .practice_runner import MAX_SOURCE_BYTES, PracticeCaseInput, PracticeRunError, run_practice
+from .practice_service import DIFFICULTIES, STATUSES, exercise_detail, get_exercise, list_exercises, record_run
+from .ratelimit import auth_limiter, practice_limiter
 from .course_sync import ContentSyncError, resolve_content_root, sync_courses
-from .schemas import CourseDetailOut, CourseSummaryOut, ExecuteIn, ExerciseOut, ExerciseSubmit, LessonDetailOut, LessonSummaryOut, LoginRequest, ProgressIn, Token, UserCreate, UserOut
+from .schemas import CourseDetailOut, CourseSummaryOut, ExecuteIn, ExerciseOut, ExerciseSubmit, LessonDetailOut, LessonSummaryOut, LoginRequest, PracticeCatalogOut, PracticeDetailOut, PracticeProgressOut, PracticeRunIn, PracticeRunOut, ProgressIn, Token, UserCreate, UserOut
 
 
 @asynccontextmanager
@@ -140,6 +143,83 @@ def lesson_detail(lesson_id: int, db: Session = Depends(get_db)):
     return LessonDetailOut(id=lesson.id, title=lesson.title, order=lesson.order, duration=lesson.duration, has_exercises=bool(quick_checks), practice_count=sum(item.kind == "function" for item in lesson.exercises), course_id=lesson.course_id, course_slug=lesson.course.slug, markdown=lesson.markdown, exercises=[ExerciseOut.model_validate(item) for item in quick_checks], asset_base_url=f"/api/course-assets/{lesson.course.slug}/", lesson_links=links)
 
 
+@app.get("/api/practice/exercises", response_model=PracticeCatalogOut)
+def practice_catalog(
+    query: str = Query("", max_length=120),
+    course: str | None = Query(None, max_length=160),
+    lesson_id: int | None = Query(None, gt=0),
+    difficulty: str | None = None,
+    tag: str | None = Query(None, max_length=80),
+    status: str | None = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(12, ge=1, le=48),
+    user: User | None = Depends(optional_current_user),
+    db: Session = Depends(get_db),
+):
+    if difficulty is not None and difficulty not in DIFFICULTIES:
+        raise HTTPException(422, "Invalid difficulty")
+    if status is not None:
+        if status not in STATUSES:
+            raise HTTPException(422, "Invalid status")
+        if user is None:
+            raise HTTPException(401, "Authentication required for status filtering")
+    return list_exercises(db, user, query=query, course=course, lesson_id=lesson_id, difficulty=difficulty, tag=tag, status=status, page=page, page_size=page_size)
+
+
+@app.get("/api/practice/exercises/{slug}", response_model=PracticeDetailOut)
+def practice_exercise_detail(
+    slug: str,
+    user: User | None = Depends(optional_current_user),
+    db: Session = Depends(get_db),
+):
+    exercise = get_exercise(db, slug)
+    if exercise is None:
+        raise HTTPException(404, "Practice exercise not found")
+    return exercise_detail(db, exercise, user)
+
+
+@app.post("/api/practice/exercises/{slug}/run", response_model=PracticeRunOut)
+def run_practice_exercise(
+    slug: str,
+    payload: PracticeRunIn,
+    request: Request,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    if not practice_limiter.allow(f"{user.id}:{client_ip(request)}"):
+        raise HTTPException(429, "Too many practice runs. Try again later.")
+    if len(payload.code.encode("utf-8")) > MAX_SOURCE_BYTES:
+        raise HTTPException(413, "Code is too long")
+    exercise = get_exercise(db, slug)
+    if exercise is None:
+        raise HTTPException(404, "Practice exercise not found")
+    signature = json.loads(exercise.signature_json)
+    cases = [
+        PracticeCaseInput(
+            json.loads(case.args_json),
+            json.loads(case.kwargs_json),
+            json.loads(case.expected_json),
+            case.comparison,
+            case.tolerance,
+        )
+        for case in sorted(exercise.cases, key=lambda item: item.order)
+    ]
+    try:
+        result = run_practice(
+            payload.code,
+            exercise.function_name or "",
+            [item["name"] for item in signature["parameters"]],
+            cases,
+        )
+    except PracticeRunError as exc:
+        result = {"ok": False, "passed": False, "passed_count": 0, "total_count": len(cases), "error": str(exc), "cases": []}
+    except OSError as exc:
+        raise HTTPException(503, "Practice runner unavailable") from exc
+    progress = record_run(db, user, exercise, payload.code, bool(result["passed"]))
+    result["progress"] = PracticeProgressOut.model_validate(progress, from_attributes=True)
+    return result
+
+
 @app.get("/api/course-assets/{course_slug}/{asset_path:path}")
 def course_asset(course_slug: str, asset_path: str):
     index = getattr(app.state, "content_index", None)
@@ -191,6 +271,8 @@ def update_progress(payload: ProgressIn, user: User = Depends(current_user), db:
 def submit_exercise(exercise_id: int, payload: ExerciseSubmit, user: User = Depends(current_user), db: Session = Depends(get_db)):
     exercise = db.get(Exercise, exercise_id)
     if not exercise:
+        raise HTTPException(404, "Exercise not found")
+    if exercise.kind != "quick_check":
         raise HTTPException(404, "Exercise not found")
     correct = payload.answer.strip().lower() == exercise.expected_answer.lower()
     progress = db.scalar(select(Progress).where(Progress.user_id == user.id, Progress.lesson_id == exercise.lesson_id))
