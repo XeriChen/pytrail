@@ -18,6 +18,8 @@ import {
   Play,
   RotateCcw,
   Settings,
+  Moon,
+  Sun,
   Terminal,
   Trophy,
   X,
@@ -34,6 +36,7 @@ import {
   writeLocale,
 } from './i18n'
 import { Particle, Vec, cardTilt, createParticles, particleColor, stepScene } from './motion'
+import { Theme, useTheme } from './theme'
 import './styles.css'
 
 const CourseMarkdown = React.lazy(() =>
@@ -88,7 +91,7 @@ async function request<T>(path: string, options: RequestInit = {}, failed: strin
   return response.json()
 }
 
-function TrailCanvas({ pointer }: { pointer: Vec }) {
+function TrailCanvas({ pointer, theme }: { pointer: Vec; theme: Theme }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const particlesRef = useRef<Particle[]>([])
   const pointerRef = useRef(pointer)
@@ -118,7 +121,7 @@ function TrailCanvas({ pointer }: { pointer: Vec }) {
       last = now
       const w = window.innerWidth
       const h = window.innerHeight
-      ctx.fillStyle = 'rgba(7, 6, 10, 0.22)'
+      ctx.fillStyle = theme === 'dark' ? 'rgba(7, 6, 10, 0.22)' : 'rgba(245, 246, 244, 0.28)'
       ctx.fillRect(0, 0, w, h)
       if (!reduce) {
         particlesRef.current = stepScene(particlesRef.current, pointerRef.current, dt, { w, h })
@@ -142,12 +145,13 @@ function TrailCanvas({ pointer }: { pointer: Vec }) {
       cancelAnimationFrame(frame)
       window.removeEventListener('resize', resize)
     }
-  }, [])
+  }, [theme])
 
   return <canvas ref={canvasRef} className="trail-canvas" aria-hidden="true" />
 }
 
 export function App() {
+  const { theme, toggleTheme } = useTheme()
   const [locale, setLocaleState] = useState<Locale>(() => readLocale(typeof localStorage === 'undefined' ? null : localStorage))
   const [user, setUser] = useState<User | null>(null)
   const [dashboard, setDashboard] = useState<Dashboard>({ lessons_total: 0, lessons_completed: 0, completion: 0, average_score: 0, streak: 0 })
@@ -305,7 +309,7 @@ export function App() {
         data-view={tab}
         onMouseMove={(e) => setPointer({ x: e.clientX, y: e.clientY })}
       >
-        <TrailCanvas pointer={pointer} />
+        <TrailCanvas pointer={pointer} theme={theme} />
         <div className="grain" aria-hidden="true" />
         <div className="void-glyph" aria-hidden="true">
           {tx('brand.mark')}
@@ -323,6 +327,7 @@ export function App() {
           </nav>
           <div className="spine-foot">
             <LangSwitch />
+            <ThemeSwitch theme={theme} toggleTheme={toggleTheme} />
             <button className="ghost-btn" type="button">
               <Settings size={16} /> {tx('nav.settings')}
             </button>
@@ -389,6 +394,7 @@ export function App() {
               user={user}
               onAuth={() => setAuthOpen(true)}
               completion={dashboard.completion}
+              theme={theme}
             />
           )}
           {tab === 'practice' && <PracticeView foundation={foundation} openLesson={openLesson} />}
@@ -451,6 +457,24 @@ function LangSwitch() {
         {tx('lang.en')}
       </button>
     </div>
+  )
+}
+
+function ThemeSwitch({ theme, toggleTheme }: { theme: Theme; toggleTheme: () => void }) {
+  const { tx } = useI18n()
+  const label = theme === 'dark' ? tx('theme.toLight') : tx('theme.toDark')
+  return (
+    <button
+      className="ghost-btn theme-switch"
+      type="button"
+      aria-label={label}
+      title={label}
+      data-testid="theme-toggle"
+      onClick={toggleTheme}
+    >
+      {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+      <span>{label}</span>
+    </button>
   )
 }
 
@@ -584,6 +608,7 @@ function CourseView({
   user,
   onAuth,
   completion,
+  theme,
 }: {
   courses: CourseSummary[]
   course: CourseDetail | null
@@ -599,6 +624,7 @@ function CourseView({
   user: User | null
   onAuth: () => void
   completion: number
+  theme: Theme
 }) {
   const { locale, tx } = useI18n()
   const localized = course ? localizeCourse(locale, course) : undefined
@@ -668,7 +694,7 @@ function CourseView({
                 <div className="lesson-kicker">{tx('course.lessonMeta', { n: lesson.order, duration: lesson.duration })}</div>
                 <h2>{lesson.title}</h2>
                 <React.Suspense fallback={<StatePanel kind="loading" />}>
-                  <CourseMarkdown markdown={lesson.markdown} assetBaseUrl={lesson.asset_base_url} lessonLinks={lesson.lesson_links} onLessonLink={onLessonLink} />
+                  <CourseMarkdown markdown={lesson.markdown} assetBaseUrl={lesson.asset_base_url} lessonLinks={lesson.lesson_links} onLessonLink={onLessonLink} theme={theme} />
                 </React.Suspense>
                 <CodeRunner key={lesson.id} initial={lesson.exercises[0]?.starter_code || 'print("Hello, Python!")'} />
                 {lesson.exercises.length > 0 ? (

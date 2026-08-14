@@ -3,6 +3,7 @@ import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import type { Schema } from 'hast-util-sanitize'
+import type { Theme } from './theme'
 
 const allowedTags = [
   'a', 'b', 'blockquote', 'br', 'code', 'dd', 'del', 'details', 'dl', 'dt', 'em',
@@ -40,6 +41,7 @@ export interface CourseMarkdownProps {
   assetBaseUrl: string
   lessonLinks?: Record<string, number>
   onLessonLink?: (targetId: number) => void
+  theme?: Theme
 }
 
 export function CourseMarkdown({

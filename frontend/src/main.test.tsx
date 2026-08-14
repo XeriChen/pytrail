@@ -105,6 +105,16 @@ async function waitForMarkdown() {
 describe('on-demand course and lesson workflow', () => {
   beforeEach(() => {
     localStorage.clear()
+    vi.stubGlobal('matchMedia', vi.fn(() => ({
+      matches: true,
+      media: '(prefers-color-scheme: dark)',
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })))
     vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => baseRespond(input)))
   })
 
@@ -119,6 +129,16 @@ describe('on-demand course and lesson workflow', () => {
     await waitFor(() => expect(screen.getAllByTestId('course-card')).toHaveLength(9))
     expect(screen.getByText('Python 基础')).toBeInTheDocument()
     expect(screen.getByText('项目与生产实践')).toBeInTheDocument()
+  })
+
+  it('persists a manual theme choice from the sidebar control', async () => {
+    await mount()
+    const toggle = await screen.findByRole('button', { name: '切换至浅色主题' })
+    expect(document.documentElement.dataset.theme).toBe('dark')
+    fireEvent.click(toggle)
+    expect(document.documentElement.dataset.theme).toBe('light')
+    expect(localStorage.getItem('pytrail_theme')).toBe('light')
+    expect(screen.getByRole('button', { name: '切换至深色主题' })).toBeInTheDocument()
   })
 
   it('fetches course detail and then the first lesson when a card is opened', async () => {
