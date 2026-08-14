@@ -5,7 +5,6 @@ import {
   ArrowLeft,
   ArrowRight,
   BookOpen,
-  CheckCircle2,
   ChevronRight,
   CirclePlay,
   Code2,
@@ -38,7 +37,7 @@ import {
 } from './i18n'
 import { Particle, Vec, cardTilt, createParticles, particleColor, stepScene } from './motion'
 import { Theme, useTheme } from './theme'
-import { apiRequest as request } from './api'
+import { apiRequest as request, ApiError } from './api'
 import { PracticeRoutes } from './practice/PracticeRoutes'
 import './styles.css'
 import './practice/practice.css'
@@ -279,6 +278,11 @@ function AppShell() {
   const signOut = () => {
     localStorage.removeItem('pytrail_token')
     setUser(null)
+    setDashboard({ lessons_total: 0, lessons_completed: 0, completion: 0, average_score: 0, streak: 0 })
+  }
+
+  const refreshDashboard = () => {
+    request<Dashboard>('/dashboard', {}, failed).then(setDashboard).catch(() => {})
   }
 
   const activeTab: Tab = practiceRoute ? 'practice' : tab
@@ -378,11 +382,12 @@ function AppShell() {
               onRetryLesson={() => lessonTargetId != null && loadLesson(lessonTargetId)}
               user={user}
               onAuth={() => setAuthOpen(true)}
+              onSubmitted={refreshDashboard}
               completion={dashboard.completion}
               theme={theme}
             />
           )}
-          {practiceRoute && <div data-surface="practice"><PracticeRoutes locale={locale} theme={theme} authenticated={Boolean(user)} onAuth={() => setAuthOpen(true)} onOpenLesson={(lessonId) => openLesson({ id: lessonId, title: '', order: 0, duration: 0, has_exercises: false })} /></div>}
+          {practiceRoute && <div data-surface="practice"><PracticeRoutes locale={locale} theme={theme} authenticated={Boolean(user)} userId={user?.id ?? null} onAuth={() => setAuthOpen(true)} onOpenLesson={(lessonId) => openLesson({ id: lessonId, title: '', order: 0, duration: 0, has_exercises: false })} /></div>}
         </main>
         {authOpen && (
           <AuthModal
@@ -391,7 +396,7 @@ function AppShell() {
               localStorage.setItem('pytrail_token', token)
               setUser(u)
               setAuthOpen(false)
-              request<Dashboard>('/dashboard', {}, failed).then(setDashboard).catch(() => {})
+              refreshDashboard()
             }}
           />
         )}
@@ -593,6 +598,7 @@ function CourseView({
   onRetryLesson,
   user,
   onAuth,
+  onSubmitted,
   completion,
   theme,
 }: {
@@ -610,6 +616,7 @@ function CourseView({
   onRetryLesson: () => void
   user: User | null
   onAuth: () => void
+  onSubmitted: () => void
   completion: number
   theme: Theme
 }) {
@@ -669,7 +676,6 @@ function CourseView({
                   {item.title}
                   <small>{tx('recent.minutes', { n: item.duration })}</small>
                 </span>
-                {idx === 0 && <CheckCircle2 size={16} />}
               </button>
             ))}
           </aside>
@@ -712,7 +718,9 @@ function CourseView({
                  )}
                  <CodeRunner key={lesson.id} initial={lesson.exercises[0]?.starter_code || 'print("Hello, Python!")'} />
                 {lesson.exercises.length > 0 ? (
-                  <ExerciseCard key={lesson.exercises[0].id} exercise={lesson.exercises[0]} user={user} onAuth={onAuth} />
+                  lesson.exercises.map((exercise) => (
+                    <ExerciseCard key={exercise.id} exercise={exercise} user={user} onAuth={onAuth} onSubmitted={onSubmitted} />
+                  ))
                 ) : (
                   <div className="exercise-none">
                     <Code2 size={16} /> <span>{tx('exercise.none')}</span>
@@ -774,7 +782,7 @@ function CodeRunner({ initial }: { initial: string }) {
       const result = await request<{ stdout: string; stderr: string; ok: boolean }>('/execute', { method: 'POST', body: JSON.stringify({ code }) }, tx('request.failed'))
       setOutput(result.stdout || result.stderr || tx('playground.output'))
     } catch (err) {
-      setOutput((err as Error).message || tx('playground.offline'))
+      setOutput(err instanceof ApiError && err.status === 404 ? tx('playground.disabled') : (err as Error).message || tx('playground.offline'))
     } finally {
       setRunning(false)
     }
@@ -803,20 +811,35 @@ function ExerciseCard({
   exercise,
   user,
   onAuth,
+  onSubmitted,
 }: {
   exercise: Exercise
   user: User | null
   onAuth: () => void
+  onSubmitted: () => void
 }) {
   const { tx } = useI18n()
   const [answer, setAnswer] = useState('')
   const [result, setResult] = useState<{ correct: boolean; message: string } | null>(null)
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const submitId = useRef(0)
   const submit = async () => {
     if (!user) return onAuth()
+    const current = ++submitId.current
+    setSubmitting(true)
+    setError('')
+    setResult(null)
     try {
-      setResult(await request<{ correct: boolean; message: string }>(`/exercises/${exercise.id}/submit`, { method: 'POST', body: JSON.stringify({ answer }) }, tx('request.failed')))
-    } catch {
-      /* keep previous */
+      const data = await request<{ correct: boolean; message: string }>(`/exercises/${exercise.id}/submit`, { method: 'POST', body: JSON.stringify({ answer }) }, tx('request.failed'))
+      if (submitId.current !== current) return
+      setResult(data)
+      onSubmitted()
+    } catch (err) {
+      if (submitId.current !== current) return
+      setError((err as Error).message || tx('request.failed'))
+    } finally {
+      if (submitId.current === current) setSubmitting(false)
     }
   }
   return (
@@ -827,11 +850,12 @@ function ExerciseCard({
       <h3>{exercise.prompt}</h3>
       <div className="answer-row">
         <input value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder={tx('exercise.placeholder')} />
-        <button className="secondary-btn" type="button" onClick={submit}>
-          {tx('exercise.check')}
+        <button className="secondary-btn" type="button" onClick={submit} disabled={submitting}>
+          {submitting ? tx('state.loading') : tx('exercise.check')}
         </button>
       </div>
       {result && <p className={result.correct ? 'success' : 'error'}>{result.message}</p>}
+      {error && <p className="error">{error}</p>}
     </div>
   )
 }

@@ -29,7 +29,7 @@ describe('practice catalog', () => {
   afterEach(() => vi.unstubAllGlobals())
 
   it('loads the independent catalog and navigates by stable slug', async () => {
-    render(<MemoryRouter initialEntries={['/practice']}><Routes><Route path="/practice" element={<PracticeCatalog locale="zh" authenticated={false} />} /><Route path="/practice/:slug" element={<h1>工作台</h1>} /></Routes></MemoryRouter>)
+    render(<MemoryRouter initialEntries={['/practice']}><Routes><Route path="/practice" element={<PracticeCatalog locale="zh" authenticated={false} userId={null} />} /><Route path="/practice/:slug" element={<h1>工作台</h1>} /></Routes></MemoryRouter>)
     expect(await screen.findByRole('heading', { name: '九门课程精选题' })).toBeInTheDocument()
     expect(screen.getByText('区间质数统计')).toBeInTheDocument()
     expect(String(vi.mocked(fetch).mock.calls[0][0])).toContain('/api/practice/exercises')
@@ -38,10 +38,27 @@ describe('practice catalog', () => {
   })
 
   it('writes filters to the request URL and disables anonymous progress filters', async () => {
-    render(<MemoryRouter initialEntries={['/practice']}><PracticeCatalog locale="zh" authenticated={false} /></MemoryRouter>)
+    render(<MemoryRouter initialEntries={['/practice']}><PracticeCatalog locale="zh" authenticated={false} userId={null} /></MemoryRouter>)
     await screen.findByText('区间质数统计')
     expect(screen.getByRole('combobox', { name: '进度' })).toBeDisabled()
     fireEvent.change(screen.getByRole('combobox', { name: '难度' }), { target: { value: 'easy' } })
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('difficulty=easy'))).toBe(true))
+  })
+
+  it('does not refetch when only the display language switches', async () => {
+    const { rerender } = render(<MemoryRouter initialEntries={['/practice']}><PracticeCatalog locale="zh" authenticated userId={1} /></MemoryRouter>)
+    await screen.findByText('区间质数统计')
+    const callsBefore = vi.mocked(fetch).mock.calls.length
+    rerender(<MemoryRouter initialEntries={['/practice']}><PracticeCatalog locale="en" authenticated userId={1} /></MemoryRouter>)
+    expect(screen.getByText('区间质数统计')).toBeInTheDocument()
+    expect(vi.mocked(fetch).mock.calls.length).toBe(callsBefore)
+  })
+
+  it('refetches when the signed-in account changes', async () => {
+    const { rerender } = render(<MemoryRouter initialEntries={['/practice']}><PracticeCatalog locale="zh" authenticated userId={1} /></MemoryRouter>)
+    await screen.findByText('区间质数统计')
+    const callsBefore = vi.mocked(fetch).mock.calls.length
+    rerender(<MemoryRouter initialEntries={['/practice']}><PracticeCatalog locale="zh" authenticated userId={2} /></MemoryRouter>)
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.length).toBeGreaterThan(callsBefore))
   })
 })

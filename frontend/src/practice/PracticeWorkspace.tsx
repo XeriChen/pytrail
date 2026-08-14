@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import { python } from '@codemirror/lang-python'
-import { ArrowLeft, BookOpen, CheckCircle2, CircleX, Code2, Play, RotateCcw, Terminal } from 'lucide-react'
+import { ArrowLeft, BookOpen, CheckCircle2, CircleX, Code2, Maximize2, Minimize2, Play, RotateCcw, Terminal } from 'lucide-react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { apiRequest } from '../api'
 import type { Locale } from '../i18n'
@@ -14,16 +14,20 @@ export function PracticeWorkspace({
   locale,
   theme,
   authenticated,
+  userId,
   onAuth,
   onOpenLesson,
 }: {
   locale: Locale
   theme: Theme
   authenticated: boolean
+  userId: number | null
   onAuth: () => void
   onOpenLesson: (lessonId: number) => void
 }) {
   const zh = locale === 'zh'
+  const zhRef = useRef(zh)
+  zhRef.current = zh
   const { slug = '' } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
@@ -33,24 +37,54 @@ export function PracticeWorkspace({
   const [running, setRunning] = useState(false)
   const [result, setResult] = useState<PracticeRunResult | null>(null)
   const [mobileTab, setMobileTab] = useState<'statement' | 'code' | 'results'>('statement')
+  const [editorFullscreen, setEditorFullscreen] = useState(false)
   const [requestKey, setRequestKey] = useState(0)
   const runRequestId = useRef(0)
+  const fullscreenButton = useRef<HTMLButtonElement>(null)
+  const shouldRestoreFullscreenFocus = useRef(false)
 
   useEffect(() => {
     const controller = new AbortController()
     runRequestId.current += 1
     setRunning(false)
+    setEditorFullscreen(false)
     setState('loading')
     setDetail(null)
     setResult(null)
-    apiRequest<PracticeDetail>(`/practice/exercises/${slug}`, {}, zh ? '题目加载失败' : 'Failed to load problem', controller.signal)
+    apiRequest<PracticeDetail>(`/practice/exercises/${slug}`, {}, zhRef.current ? '题目加载失败' : 'Failed to load problem', controller.signal)
       .then((value) => { setDetail(value); setCode(value.progress?.last_code || value.starter_code); setState('success') })
       .catch((error) => { if (error.name !== 'AbortError') setState('error') })
     return () => {
       controller.abort()
       runRequestId.current += 1
     }
-  }, [slug, requestKey, zh])
+    // Locale only affects display copy: reload on slug, retry, or auth identity
+    // changes. A plain language switch must not refetch and overwrite unsaved code.
+  }, [slug, requestKey, userId])
+
+  useEffect(() => {
+    if (!editorFullscreen) {
+      if (shouldRestoreFullscreenFocus.current) {
+        shouldRestoreFullscreenFocus.current = false
+        fullscreenButton.current?.focus()
+      }
+      return
+    }
+
+    shouldRestoreFullscreenFocus.current = true
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.body.classList.add('practice-editor-fullscreen')
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setEditorFullscreen(false)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      document.body.classList.remove('practice-editor-fullscreen')
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [editorFullscreen])
 
   const signature = useMemo(() => detail ? `${detail.function_name}(${detail.signature.parameters.map((item) => `${item.name}: ${item.type}`).join(', ')}) -> ${detail.signature.returns}` : '', [detail])
   const codeBytes = useMemo(() => new TextEncoder().encode(code).length, [code])
@@ -101,9 +135,30 @@ export function PracticeWorkspace({
           <div className="public-cases"><h2>{zh ? '公开样例' : 'Public examples'}</h2>{detail.cases.map((item) => <article key={item.order}><span>{String(item.order).padStart(2, '0')}</span><div><code>{JSON.stringify(item.args)}</code><strong>→ {JSON.stringify(item.expected)}</strong>{item.explanation && <p>{item.explanation}</p>}</div></article>)}</div>
           <button className="lesson-link-btn" type="button" onClick={() => onOpenLesson(detail.lesson.id)}><BookOpen size={16} />{zh ? '回到对应课时' : 'Open related lesson'}</button>
         </section>
-        <section className={`workspace-code ${mobileTab === 'code' ? 'mobile-active' : ''}`}>
-          <div className="editor-toolbar"><div><Terminal size={16} /><span>Python 3</span></div><button className="icon-btn" type="button" aria-label={zh ? '重置代码' : 'Reset code'} title={zh ? '重置代码' : 'Reset code'} onClick={resetCode}><RotateCcw size={16} /></button></div>
-          <CodeMirror value={code} onChange={setCode} extensions={[python()]} theme={theme} height="100%" minHeight="360px" aria-label={zh ? 'Python 代码' : 'Python code'} basicSetup={{ lineNumbers: true, bracketMatching: true, autocompletion: false }} />
+        <section
+          className={`workspace-code ${mobileTab === 'code' ? 'mobile-active' : ''}${editorFullscreen ? ' is-fullscreen' : ''}`}
+          role={editorFullscreen ? 'dialog' : undefined}
+          aria-modal={editorFullscreen ? 'true' : undefined}
+          aria-label={editorFullscreen ? (zh ? '代码编辑器' : 'Code editor') : undefined}
+        >
+          <div className="editor-toolbar">
+            <div className="editor-language"><Terminal size={16} /><span>Python 3</span></div>
+            <div className="editor-toolbar-actions">
+              <button className="icon-btn" type="button" aria-label={zh ? '重置代码' : 'Reset code'} title={zh ? '重置代码' : 'Reset code'} onClick={resetCode}><RotateCcw size={16} /></button>
+              <button
+                ref={fullscreenButton}
+                className="icon-btn"
+                type="button"
+                aria-label={editorFullscreen ? (zh ? '退出全屏' : 'Exit full screen') : (zh ? '全屏编辑' : 'Edit full screen')}
+                aria-pressed={editorFullscreen}
+                title={editorFullscreen ? (zh ? '退出全屏' : 'Exit full screen') : (zh ? '全屏编辑' : 'Edit full screen')}
+                onClick={() => setEditorFullscreen((value) => !value)}
+              >
+                {editorFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+              </button>
+            </div>
+          </div>
+          <CodeMirror value={code} onChange={setCode} extensions={[python()]} theme={theme} height="100%" minHeight={editorFullscreen ? '0' : '360px'} aria-label={zh ? 'Python 代码' : 'Python code'} basicSetup={{ lineNumbers: true, bracketMatching: true, autocompletion: false }} />
           <div className="editor-actions"><span>{codeBytes} / 12000 B</span><button className="run-practice-btn" type="button" disabled={running || codeBytes > 12000} onClick={run}><Play size={16} />{running ? (zh ? '运行中' : 'Running') : (zh ? '运行样例' : 'Run examples')}</button></div>
         </section>
         <aside className={`workspace-results ${mobileTab === 'results' ? 'mobile-active' : ''}`}>

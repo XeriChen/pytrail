@@ -1,6 +1,6 @@
 import React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 vi.mock('@uiw/react-codemirror', () => ({
   default: ({ value, onChange, ...props }: { value: string; onChange: (value: string) => void; 'aria-label'?: string }) => <textarea aria-label={props['aria-label']} value={value} onChange={(event) => onChange(event.target.value)} />,
@@ -32,6 +32,7 @@ const SUMMARIES: CourseSummary[] = [
 const FOUNDATIONS_LESSONS = [
   { id: 101, title: '初识Python', order: 1, duration: 12, has_exercises: true, practice_count: 1 },
   { id: 102, title: '第一个Python程序', order: 2, duration: 10, has_exercises: true, practice_count: 0 },
+  { id: 103, title: '多题课时', order: 3, duration: 9, has_exercises: true, practice_count: 0 },
 ]
 
 const FOUNDATIONS_DETAIL = { ...SUMMARIES[0], lessons: FOUNDATIONS_LESSONS }
@@ -58,6 +59,18 @@ const SECOND_LESSON_DETAIL = {
   order: 2,
   markdown: '## 第一个Python程序',
   exercises: [{ id: 2, prompt: 'Which function prints text?', starter_code: 'print("hello")' }],
+}
+
+const MULTI_EXERCISE_LESSON_DETAIL = {
+  ...LESSON_DETAIL,
+  id: 103,
+  title: '多题课时',
+  order: 3,
+  markdown: '## 多题课时',
+  exercises: [
+    { id: 3, prompt: 'Which keyword defines a function?', starter_code: 'def fac(n): pass' },
+    { id: 4, prompt: 'What is the factorial of 5?', starter_code: '# 5 * 4 * 3 * 2 * 1 = ?' },
+  ],
 }
 
 const PRACTICE_DETAIL = {
@@ -110,7 +123,10 @@ function baseRespond(input: RequestInfo | URL): Promise<Response> {
   if (url.includes('/api/courses')) return respond(SUMMARIES)
   if (url.includes('/api/lessons/101')) return respond(LESSON_DETAIL)
   if (url.includes('/api/lessons/102')) return respond(SECOND_LESSON_DETAIL)
+  if (url.includes('/api/lessons/103')) return respond(MULTI_EXERCISE_LESSON_DETAIL)
   if (url.includes('/api/lessons/201')) return respond(NO_EXERCISE_LESSON)
+  if (url.includes('/api/exercises/') && url.endsWith('/submit')) return respond({ correct: true, score: 100, message: 'Nice work!' })
+  if (url.includes('/api/auth/me')) return respond({ id: 1, name: 'Ada', email: 'ada@example.com' })
   if (url.includes('/api/dashboard')) return respond({ lessons_total: 102, lessons_completed: 0, completion: 0, average_score: 0, streak: 0 })
   return respond({ detail: 'Not found' }, 404)
 }
@@ -272,5 +288,97 @@ describe('on-demand course and lesson workflow', () => {
     await waitFor(() => expect(screen.getAllByRole('heading', { name: '初识Python' }).length).toBeGreaterThan(0))
     await waitForMarkdown()
     expect(lessonCalls).toBeGreaterThanOrEqual(2)
+  })
+
+  it('renders every quick check of a multi-exercise lesson', async () => {
+    await mount()
+    await waitFor(() => expect(screen.getAllByTestId('course-card')).toHaveLength(9))
+    fireEvent.click(screen.getAllByTestId('course-card')[0].querySelector('button')!)
+    await waitFor(() => expect(screen.getAllByRole('heading', { name: '初识Python' }).length).toBeGreaterThan(0))
+    fireEvent.click(screen.getByRole('button', { name: /多题课时/ }))
+    await waitFor(() => expect(screen.getAllByRole('heading', { name: '多题课时' }).length).toBeGreaterThan(0))
+    expect(screen.getAllByTestId('quick-check')).toHaveLength(2)
+    expect(screen.getByText('Which keyword defines a function?')).toBeInTheDocument()
+    expect(screen.getByText('What is the factorial of 5?')).toBeInTheDocument()
+  })
+
+  it('shows no completion icon in the lesson sidebar', async () => {
+    await mount()
+    await waitFor(() => expect(screen.getAllByTestId('course-card')).toHaveLength(9))
+    fireEvent.click(screen.getAllByTestId('course-card')[0].querySelector('button')!)
+    await waitFor(() => expect(screen.getAllByRole('heading', { name: '初识Python' }).length).toBeGreaterThan(0))
+    expect(document.querySelector('.lesson-nav svg')).toBeNull()
+  })
+
+  it('shows a loading state, renders the result, and refreshes the dashboard after a quick check', async () => {
+    localStorage.setItem('pytrail_token', 'test-token')
+    let resolveSubmit: ((response: Response) => void) | undefined
+    const pendingSubmit = new Promise<Response>((resolve) => { resolveSubmit = resolve })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input)
+        if (url.includes('/api/exercises/') && url.endsWith('/submit')) return pendingSubmit
+        return baseRespond(input)
+      }),
+    )
+    const fetchMock = vi.mocked(fetch)
+    await mount()
+    await waitFor(() => expect(screen.getAllByTestId('course-card')).toHaveLength(9))
+    fireEvent.click(screen.getAllByTestId('course-card')[0].querySelector('button')!)
+    await waitFor(() => expect(screen.getAllByRole('heading', { name: '初识Python' }).length).toBeGreaterThan(0))
+    const dashboardCallsBefore = fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/dashboard')).length
+    const check = screen.getByRole('button', { name: '核对答案' })
+    fireEvent.click(check)
+    expect(screen.getByRole('button', { name: '加载中…' })).toBeDisabled()
+    await act(async () => resolveSubmit?.(new Response(JSON.stringify({ correct: true, score: 100, message: 'Nice work!' }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    expect(await screen.findByText('Nice work!')).toBeInTheDocument()
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/dashboard')).length).toBeGreaterThan(dashboardCallsBefore))
+  })
+
+  it('replaces a stale success result with the failure message when a submit fails', async () => {
+    localStorage.setItem('pytrail_token', 'test-token')
+    let submitCalls = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input)
+        if (url.includes('/api/exercises/') && url.endsWith('/submit')) {
+          submitCalls += 1
+          if (submitCalls === 2) return Promise.resolve(new Response(JSON.stringify({ detail: 'Server error' }), { status: 500, headers: { 'Content-Type': 'application/json' } }))
+        }
+        return baseRespond(input)
+      }),
+    )
+    await mount()
+    await waitFor(() => expect(screen.getAllByTestId('course-card')).toHaveLength(9))
+    fireEvent.click(screen.getAllByTestId('course-card')[0].querySelector('button')!)
+    await waitFor(() => expect(screen.getAllByRole('heading', { name: '初识Python' }).length).toBeGreaterThan(0))
+    const check = screen.getByRole('button', { name: '核对答案' })
+    fireEvent.click(check)
+    expect(await screen.findByText('Nice work!')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '核对答案' }))
+    expect(await screen.findByText('Server error')).toBeInTheDocument()
+    expect(screen.queryByText('Nice work!')).not.toBeInTheDocument()
+  })
+
+  it('clears the dashboard when signing out', async () => {
+    localStorage.setItem('pytrail_token', 'test-token')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url.includes('/api/dashboard')) {
+          return Promise.resolve(new Response(JSON.stringify({ lessons_total: 102, lessons_completed: 12, completion: 12, average_score: 80, streak: 4 }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+        }
+        return baseRespond(input)
+      }),
+    )
+    await mount()
+    await waitFor(() => expect(screen.getByText('连续 4 天')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /退出/ }))
+    expect(await screen.findByText('连续 0 天')).toBeInTheDocument()
+    expect(localStorage.getItem('pytrail_token')).toBeNull()
+    expect(screen.getByTestId('nav-signin')).toBeInTheDocument()
   })
 })

@@ -76,6 +76,11 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "ok")
 
+    def test_lifespan_releases_startup_session_before_serving(self) -> None:
+        with TestClient(app) as client:
+            self.assertEqual(client.get("/api/health").status_code, 200)
+            self.assertEqual(engine.pool.checkedout(), 0)
+
     def test_courses_nonempty(self) -> None:
         response = self.client.get("/api/courses")
         self.assertEqual(response.status_code, 200)
@@ -208,36 +213,224 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(self.client.get("/api/course-assets/not-a-course/res/a.png").status_code, 404)
         self.assertEqual(self.client.get("/api/course-assets/python-foundations/%2E%2E/01.%E5%88%9D%E8%AF%86Python.md").status_code, 404)
 
-    def test_execute_requires_auth(self) -> None:
+    def test_execute_disabled_by_default(self) -> None:
         response = self.client.post("/api/execute", json={"code": "print(1)"})
+        self.assertEqual(response.status_code, 404)
+        auth = self.register()
+        response = self.client.post("/api/execute", json={"code": "print(1)"}, headers=auth["headers"])
+        self.assertEqual(response.status_code, 404)
+
+    def test_execute_requires_auth_when_enabled(self) -> None:
+        with patch.dict(os.environ, {"PYTRAIL_ENABLE_LEGACY_EXECUTE": "1"}):
+            response = self.client.post("/api/execute", json={"code": "print(1)"})
         self.assertNotEqual(response.status_code, 200)
         self.assertEqual(response.status_code, 401)
 
-    def test_execute_prints_stdout_when_authenticated(self) -> None:
+    def test_execute_prints_stdout_when_enabled(self) -> None:
         auth = self.register()
         marker = "pytrail-hello-stdout"
-        response = self.client.post("/api/execute", json={"code": f"print({marker!r})"}, headers=auth["headers"])
+        with patch.dict(os.environ, {"PYTRAIL_ENABLE_LEGACY_EXECUTE": "1"}):
+            response = self.client.post("/api/execute", json={"code": f"print({marker!r})"}, headers=auth["headers"])
         self.assertEqual(response.status_code, 200, response.text)
         body = response.json()
         self.assertTrue(body["ok"])
         self.assertIn(marker, body["stdout"])
 
-    def test_execute_rejects_oversize_code(self) -> None:
+    def test_execute_rejects_oversize_code_when_enabled(self) -> None:
         auth = self.register()
-        response = self.client.post("/api/execute", json={"code": "x" * 4001}, headers=auth["headers"])
+        with patch.dict(os.environ, {"PYTRAIL_ENABLE_LEGACY_EXECUTE": "1"}):
+            response = self.client.post("/api/execute", json={"code": "x" * 4001}, headers=auth["headers"])
         self.assertEqual(response.status_code, 413)
 
-    def test_execute_timeout_fails_closed(self) -> None:
+    def test_execute_unavailable_in_production_even_when_enabled(self) -> None:
         auth = self.register()
-        response = self.client.post(
-            "/api/execute",
-            json={"code": "import time\ntime.sleep(5)"},
-            headers=auth["headers"],
-        )
+        with patch.dict(os.environ, {"PYTRAIL_ENABLE_LEGACY_EXECUTE": "1", "PYTRAIL_ENV": "production"}):
+            response = self.client.post("/api/execute", json={"code": "print(1)"}, headers=auth["headers"])
+        self.assertEqual(response.status_code, 404)
+
+    def test_execute_timeout_fails_closed_when_enabled(self) -> None:
+        auth = self.register()
+        with patch.dict(os.environ, {"PYTRAIL_ENABLE_LEGACY_EXECUTE": "1"}):
+            response = self.client.post(
+                "/api/execute",
+                json={"code": "import time\ntime.sleep(5)"},
+                headers=auth["headers"],
+            )
         self.assertEqual(response.status_code, 200, response.text)
         body = response.json()
         self.assertFalse(body["ok"])
         self.assertIn("timed out", body["stderr"].lower())
+
+    def test_progress_rejects_unknown_lesson(self) -> None:
+        auth = self.register()
+        response = self.client.post(
+            "/api/progress",
+            json={"lesson_id": 999_999, "completed": True, "score": 100},
+            headers=auth["headers"],
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_progress_upsert_updates_a_single_row(self) -> None:
+        auth = self.register()
+        courses = self.client.get("/api/courses").json()
+        lesson_id = self.client.get(f"/api/courses/{courses[0]['id']}").json()["lessons"][0]["id"]
+        first = self.client.post(
+            "/api/progress",
+            json={"lesson_id": lesson_id, "completed": True, "score": 100},
+            headers=auth["headers"],
+        )
+        self.assertEqual(first.status_code, 200, first.text)
+        second = self.client.post(
+            "/api/progress",
+            json={"lesson_id": lesson_id, "completed": False, "score": 37},
+            headers=auth["headers"],
+        )
+        self.assertEqual(second.status_code, 200, second.text)
+        self.assertFalse(second.json()["completed"])
+        with SessionLocal() as db:
+            rows = db.scalars(select(Progress).where(Progress.user_id == auth["user"]["id"])).all()
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0].score, 37)
+
+    def test_quick_check_submit_persists_recent_lesson_result(self) -> None:
+        auth = self.register()
+        lesson = self.client.get("/api/lessons/1").json()
+        self.assertTrue(lesson["exercises"])
+        exercise = lesson["exercises"][0]
+        wrong = self.client.post(
+            f"/api/exercises/{exercise['id']}/submit",
+            json={"answer": "definitely-not-the-answer"},
+            headers=auth["headers"],
+        )
+        self.assertEqual(wrong.status_code, 200, wrong.text)
+        self.assertFalse(wrong.json()["correct"])
+        self.assertEqual(wrong.json()["score"], 40)
+        with SessionLocal() as db:
+            rows = db.scalars(select(Progress).where(Progress.user_id == auth["user"]["id"])).all()
+            self.assertEqual(len(rows), 1)
+            self.assertFalse(rows[0].completed)
+
+    def test_concurrent_first_progress_writes_via_api(self) -> None:
+        import threading
+
+        auth = self.register()
+        courses = self.client.get("/api/courses").json()
+        lesson_id = self.client.get(f"/api/courses/{courses[0]['id']}").json()["lessons"][1]["id"]
+        barrier = threading.Barrier(6)
+        statuses: list[int] = []
+
+        def worker() -> None:
+            barrier.wait()
+            response = self.client.post(
+                "/api/progress",
+                json={"lesson_id": lesson_id, "completed": True, "score": 80},
+                headers=auth["headers"],
+            )
+            statuses.append(response.status_code)
+
+        threads = [threading.Thread(target=worker) for _ in range(6)]
+        for item in threads:
+            item.start()
+        for item in threads:
+            item.join()
+        self.assertEqual(statuses, [200] * 6)
+        with SessionLocal() as db:
+            rows = db.scalars(select(Progress).where(Progress.user_id == auth["user"]["id"])).all()
+            self.assertEqual(len(rows), 1)
+
+    def test_sqlite_foreign_keys_are_enforced(self) -> None:
+        from sqlalchemy.exc import IntegrityError
+
+        with engine.connect() as connection:
+            self.assertEqual(connection.exec_driver_sql("PRAGMA foreign_keys").scalar(), 1)
+        auth = self.register()
+        with SessionLocal() as db:
+            with self.assertRaises(IntegrityError):
+                db.add(Progress(user_id=auth["user"]["id"], lesson_id=999_999, completed=True, score=100))
+                db.commit()
+            db.rollback()
+
+    def test_register_normalizes_email_and_rejects_blank_name(self) -> None:
+        response = self.client.post(
+            "/api/auth/register",
+            json={"name": "  Ada  ", "email": "  ADA@Example.COM  ", "password": "password123"},
+        )
+        self.assertEqual(response.status_code, 201, response.text)
+        self.assertEqual(response.json()["user"]["email"], "ada@example.com")
+        self.assertEqual(response.json()["user"]["name"], "Ada")
+        login = self.client.post("/api/auth/login", json={"email": "ADA@example.com", "password": "password123"})
+        self.assertEqual(login.status_code, 200, login.text)
+        blank = self.client.post("/api/auth/register", json={"name": "   ", "email": unique_email(), "password": "password123"})
+        self.assertEqual(blank.status_code, 422)
+        short_password = self.client.post("/api/auth/register", json={"name": "Ada", "email": unique_email(), "password": "short"})
+        self.assertEqual(short_password.status_code, 422)
+
+    def test_register_rejects_oversized_fields(self) -> None:
+        response = self.client.post(
+            "/api/auth/register",
+            json={"name": "x" * 81, "email": unique_email(), "password": "password123"},
+        )
+        self.assertEqual(response.status_code, 422)
+        response = self.client.post(
+            "/api/auth/register",
+            json={"name": "Ada", "email": f"{'a' * 160}@example.com", "password": "password123"},
+        )
+        self.assertEqual(response.status_code, 422)
+        response = self.client.post(
+            "/api/auth/register",
+            json={"name": "Ada", "email": unique_email(), "password": "p" * 129},
+        )
+        self.assertEqual(response.status_code, 422)
+
+    def test_register_password_is_not_trimmed(self) -> None:
+        padded = "  password123  "
+        response = self.client.post(
+            "/api/auth/register",
+            json={"name": "Ada", "email": unique_email(), "password": padded},
+        )
+        self.assertEqual(response.status_code, 201, response.text)
+        trimmed_login = self.client.post(
+            "/api/auth/login",
+            json={"email": response.json()["user"]["email"], "password": "password123"},
+        )
+        self.assertEqual(trimmed_login.status_code, 401)
+        exact_login = self.client.post(
+            "/api/auth/login",
+            json={"email": response.json()["user"]["email"], "password": padded},
+        )
+        self.assertEqual(exact_login.status_code, 200, exact_login.text)
+
+    def test_concurrent_duplicate_registration_returns_conflict_not_500(self) -> None:
+        import threading
+
+        email = unique_email()
+        barrier = threading.Barrier(4)
+        statuses: list[int] = []
+
+        def worker() -> None:
+            barrier.wait()
+            response = self.client.post(
+                "/api/auth/register",
+                json={"name": "Ada", "email": email, "password": "password123"},
+            )
+            statuses.append(response.status_code)
+
+        threads = [threading.Thread(target=worker) for _ in range(4)]
+        for item in threads:
+            item.start()
+        for item in threads:
+            item.join()
+        self.assertEqual(statuses.count(201), 1)
+        self.assertEqual(statuses.count(409), 3)
+
+    def test_secret_key_policy_refuses_short_keys_in_production(self) -> None:
+        with self.assertRaises(RuntimeError):
+            enforce_secret_key_policy(secret="short-key", environment="production")
+        with self.assertRaises(RuntimeError):
+            enforce_secret_key_policy(secret="x" * 15, environment="production")
+        acceptable = "x" * 16
+        self.assertFalse(is_insecure_secret(acceptable))
+        self.assertEqual(enforce_secret_key_policy(secret=acceptable, environment="production"), acceptable)
 
     def test_login_burst_is_rate_limited(self) -> None:
         email = unique_email()
