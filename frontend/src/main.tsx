@@ -33,9 +33,12 @@ import {
   t,
   writeLocale,
 } from './i18n'
-import { CourseMarkdown } from './markdown'
 import { Particle, Vec, cardTilt, createParticles, particleColor, stepScene } from './motion'
 import './styles.css'
+
+const CourseMarkdown = React.lazy(() =>
+  import('./markdown').then((module) => ({ default: module.CourseMarkdown })),
+)
 
 const API = import.meta.env.VITE_API_URL || '/api'
 type Exercise = { id: number; prompt: string; starter_code: string }
@@ -144,7 +147,7 @@ function TrailCanvas({ pointer }: { pointer: Vec }) {
   return <canvas ref={canvasRef} className="trail-canvas" aria-hidden="true" />
 }
 
-function App() {
+export function App() {
   const [locale, setLocaleState] = useState<Locale>(() => readLocale(typeof localStorage === 'undefined' ? null : localStorage))
   const [user, setUser] = useState<User | null>(null)
   const [dashboard, setDashboard] = useState<Dashboard>({ lessons_total: 0, lessons_completed: 0, completion: 0, average_score: 0, streak: 0 })
@@ -249,6 +252,12 @@ function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    if (tab === 'course' && courseState === 'idle' && courses[0]) {
+      loadCourse(courses[0].id)
+    }
+  }, [tab, courseState, courses])
 
   const openCourse = (course: CourseSummary) => {
     setTab('course')
@@ -658,10 +667,12 @@ function CourseView({
               <>
                 <div className="lesson-kicker">{tx('course.lessonMeta', { n: lesson.order, duration: lesson.duration })}</div>
                 <h2>{lesson.title}</h2>
-                <CourseMarkdown markdown={lesson.markdown} assetBaseUrl={lesson.asset_base_url} lessonLinks={lesson.lesson_links} onLessonLink={onLessonLink} />
-                <CodeRunner initial={lesson.exercises[0]?.starter_code || 'print("Hello, Python!")'} />
+                <React.Suspense fallback={<StatePanel kind="loading" />}>
+                  <CourseMarkdown markdown={lesson.markdown} assetBaseUrl={lesson.asset_base_url} lessonLinks={lesson.lesson_links} onLessonLink={onLessonLink} />
+                </React.Suspense>
+                <CodeRunner key={lesson.id} initial={lesson.exercises[0]?.starter_code || 'print("Hello, Python!")'} />
                 {lesson.exercises.length > 0 ? (
-                  <ExerciseCard exercise={lesson.exercises[0]} user={user} onAuth={onAuth} />
+                  <ExerciseCard key={lesson.exercises[0].id} exercise={lesson.exercises[0]} user={user} onAuth={onAuth} />
                 ) : (
                   <div className="exercise-none">
                     <Code2 size={16} /> <span>{tx('exercise.none')}</span>
@@ -874,4 +885,7 @@ function AuthModal({ onClose, onAuth }: { onClose: () => void; onAuth: (user: Us
   )
 }
 
-createRoot(document.getElementById('root')!).render(<App />)
+if (import.meta.env.MODE !== 'test') {
+  const root = document.getElementById('root')
+  if (root) createRoot(root).render(<App />)
+}

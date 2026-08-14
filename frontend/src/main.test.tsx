@@ -1,7 +1,6 @@
 import React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { createRoot } from 'react-dom/client'
 
 type CourseSummary = {
   id: number
@@ -47,6 +46,15 @@ const LESSON_DETAIL = {
   lesson_links: {},
 }
 
+const SECOND_LESSON_DETAIL = {
+  ...LESSON_DETAIL,
+  id: 102,
+  title: '第一个Python程序',
+  order: 2,
+  markdown: '## 第一个Python程序',
+  exercises: [{ id: 2, prompt: 'Which function prints text?', starter_code: 'print("hello")' }],
+}
+
 const NO_EXERCISE_LESSON = {
   id: 201,
   course_id: 2,
@@ -79,17 +87,19 @@ function baseRespond(input: RequestInfo | URL): Promise<Response> {
   if (url.includes('/api/courses/2')) return respond(FOUNDATIONS_COURSE_2)
   if (url.includes('/api/courses')) return respond(SUMMARIES)
   if (url.includes('/api/lessons/101')) return respond(LESSON_DETAIL)
+  if (url.includes('/api/lessons/102')) return respond(SECOND_LESSON_DETAIL)
   if (url.includes('/api/lessons/201')) return respond(NO_EXERCISE_LESSON)
   if (url.includes('/api/dashboard')) return respond({ lessons_total: 102, lessons_completed: 0, completion: 0, average_score: 0, streak: 0 })
   return respond({ detail: 'Not found' }, 404)
 }
 
 async function mount() {
-  const rootEl = document.createElement('div')
-  rootEl.id = 'root'
-  document.body.appendChild(rootEl)
-  await import('./main')
-  return { rootEl }
+  const { App } = await import('./main')
+  return render(<App />)
+}
+
+async function waitForMarkdown() {
+  await waitFor(() => expect(document.querySelector('.markdown')).toBeInTheDocument())
 }
 
 describe('on-demand course and lesson workflow', () => {
@@ -116,7 +126,27 @@ describe('on-demand course and lesson workflow', () => {
     await waitFor(() => expect(screen.getAllByTestId('course-card')).toHaveLength(9))
     fireEvent.click(screen.getAllByTestId('course-card')[0].querySelector('button')!)
     await waitFor(() => expect(screen.getAllByRole('heading', { name: '初识Python' }).length).toBeGreaterThan(0))
+    await waitForMarkdown()
     expect(screen.getByTestId('quick-check')).toBeInTheDocument()
+  })
+
+  it('opens the first course when the course navigation is used initially', async () => {
+    await mount()
+    await waitFor(() => expect(screen.getAllByTestId('course-card')).toHaveLength(9))
+    fireEvent.click(screen.getByTestId('nav-course'))
+    await waitFor(() => expect(screen.getAllByRole('heading', { name: '初识Python' }).length).toBeGreaterThan(0))
+    await waitForMarkdown()
+  })
+
+  it('resets exercise input when navigating to another lesson', async () => {
+    await mount()
+    await waitFor(() => expect(screen.getAllByTestId('course-card')).toHaveLength(9))
+    fireEvent.click(screen.getAllByTestId('course-card')[0].querySelector('button')!)
+    const answer = await screen.findByPlaceholderText('输入你的答案')
+    await waitForMarkdown()
+    fireEvent.change(answer, { target: { value: 'old answer' } })
+    fireEvent.click(screen.getByRole('button', { name: /第一个Python程序/ }))
+    await waitFor(() => expect(screen.getByPlaceholderText('输入你的答案')).toHaveValue(''))
   })
 
   it('renders the no-exercise state for a lesson without exercises', async () => {
@@ -125,6 +155,7 @@ describe('on-demand course and lesson workflow', () => {
     await waitFor(() => expect(screen.getAllByTestId('course-card')).toHaveLength(9))
     fireEvent.click(screen.getAllByTestId('course-card')[1].querySelector('button')!)
     await waitFor(() => expect(screen.getAllByRole('heading', { name: '文件读写和异常处理' }).length).toBeGreaterThan(0))
+    await waitForMarkdown()
     expect(screen.queryByTestId('quick-check')).not.toBeInTheDocument()
     expect(screen.getByText(/暂无速测题/)).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/lessons/201'), expect.anything())
@@ -149,6 +180,7 @@ describe('on-demand course and lesson workflow', () => {
     await waitFor(() => expect(screen.getByTestId('state-error')).toBeInTheDocument())
     fireEvent.click(screen.getByText('重试'))
     await waitFor(() => expect(screen.getAllByRole('heading', { name: '初识Python' }).length).toBeGreaterThan(0))
+    await waitForMarkdown()
     expect(lessonCalls).toBeGreaterThanOrEqual(2)
   })
 })

@@ -30,7 +30,7 @@ from app.auth import (  # noqa: E402
     is_insecure_secret,
     is_production_environment,
 )
-from app.database import SessionLocal  # noqa: E402
+from app.database import SessionLocal, engine  # noqa: E402
 from app.main import app  # noqa: E402
 from app.metrics import compute_streak  # noqa: E402
 from app.models import Progress  # noqa: E402
@@ -52,6 +52,8 @@ class ApiTests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls) -> None:
         cls.client_cm.__exit__(None, None, None)
+        engine.dispose()
+        Path(_DB.name).unlink(missing_ok=True)
 
     def setUp(self) -> None:
         auth_limiter.reset()

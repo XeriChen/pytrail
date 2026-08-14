@@ -3,7 +3,6 @@ import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import type { Schema } from 'hast-util-sanitize'
-import { renderToStaticMarkup } from 'react-dom/server'
 
 const allowedTags = [
   'a', 'b', 'blockquote', 'br', 'code', 'dd', 'del', 'details', 'dl', 'dt', 'em',
@@ -92,15 +91,5 @@ export function CourseMarkdown({
         {markdown}
       </ReactMarkdown>
     </div>
-  )
-}
-
-export function renderMarkdown(
-  markdown: string,
-  assetBaseUrl = '/api/course-assets/python-foundations/',
-  lessonLinks: Record<string, number> = {},
-): string {
-  return renderToStaticMarkup(
-    <CourseMarkdown markdown={markdown} assetBaseUrl={assetBaseUrl} lessonLinks={lessonLinks} />,
   )
 }

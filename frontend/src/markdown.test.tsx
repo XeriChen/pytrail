@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 import React from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
-import { CourseMarkdown, renderMarkdown, resolveAssetUrl, isExternalUrl } from './markdown'
+import { CourseMarkdown, resolveAssetUrl, isExternalUrl } from './markdown'
+
+function renderMarkdown(markdown: string): string {
+  return render(
+    <CourseMarkdown markdown={markdown} assetBaseUrl="/api/course-assets/python-foundations/" />,
+  ).container.innerHTML
+}
 
 describe('sanitized markdown renderer', () => {
   it('renders GFM tables and drops dangerous markup', () => {

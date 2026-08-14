@@ -9,7 +9,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, load_only, selectinload
 from .auth import create_token, current_user, enforce_secret_key_policy, hash_password, verify_password
 from .database import Base, SessionLocal, engine, get_db
 from .metrics import as_utc_date, compute_streak
@@ -82,7 +82,17 @@ def me(user: User = Depends(current_user)):
 
 @app.get("/api/courses", response_model=list[CourseSummaryOut])
 def courses(db: Session = Depends(get_db)):
-    rows = db.scalars(select(Course).options(selectinload(Course.lessons).selectinload(Lesson.exercises))).all()
+    rows = db.scalars(
+        select(Course).options(
+            selectinload(Course.lessons).load_only(
+                Lesson.id,
+                Lesson.course_id,
+                Lesson.title,
+                Lesson.order,
+                Lesson.duration,
+            )
+        )
+    ).all()
     index = getattr(app.state, "content_index", None)
     rows.sort(key=lambda row: index.course_order.get(row.slug, row.id) if index else row.id)
     return [CourseSummaryOut(id=row.id, slug=row.slug, title=row.title, description=row.description, level=row.level, accent=row.accent, lesson_count=len(row.lessons), total_duration=sum(lesson.duration for lesson in row.lessons)) for row in rows]
@@ -90,7 +100,19 @@ def courses(db: Session = Depends(get_db)):
 
 @app.get("/api/courses/{course_id}", response_model=CourseDetailOut)
 def course_detail(course_id: int, db: Session = Depends(get_db)):
-    course = db.scalar(select(Course).where(Course.id == course_id).options(selectinload(Course.lessons).selectinload(Lesson.exercises)))
+    lesson_summaries = selectinload(Course.lessons).options(
+        load_only(
+            Lesson.id,
+            Lesson.course_id,
+            Lesson.title,
+            Lesson.order,
+            Lesson.duration,
+        ),
+        selectinload(Lesson.exercises).load_only(Exercise.id, Exercise.lesson_id),
+    )
+    course = db.scalar(
+        select(Course).where(Course.id == course_id).options(lesson_summaries)
+    )
     if not course:
         raise HTTPException(404, "Course not found")
     lessons = [LessonSummaryOut(id=lesson.id, title=lesson.title, order=lesson.order, duration=lesson.duration, has_exercises=bool(lesson.exercises)) for lesson in sorted(course.lessons, key=lambda item: item.order)]
