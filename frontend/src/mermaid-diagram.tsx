@@ -8,6 +8,58 @@ const MIN_ZOOM = 0.6
 const MAX_ZOOM = 2
 const ZOOM_STEP = 0.2
 
+const DARK_MERMAID_TEXT = '#fff8f0'
+const DARK_MERMAID_LINE = '#d8cec3'
+const DARK_MERMAID_LABEL_BACKGROUND = '#111015'
+
+const DARK_MERMAID_THEME_CSS = `
+.edgeLabel,
+.edgeLabel p,
+.edgeLabel span {
+  color: ${DARK_MERMAID_TEXT} !important;
+  background-color: ${DARK_MERMAID_LABEL_BACKGROUND} !important;
+}
+
+.edgeLabel .label text,
+.edgeLabel .label tspan,
+.edgeLabel text,
+.edgeLabel tspan {
+  fill: ${DARK_MERMAID_TEXT} !important;
+  stroke: ${DARK_MERMAID_LABEL_BACKGROUND} !important;
+  stroke-width: 1.5px;
+  stroke-linejoin: round;
+  paint-order: stroke fill;
+}
+
+.edgeLabel .label rect,
+.edgeLabel rect {
+  fill: ${DARK_MERMAID_LABEL_BACKGROUND} !important;
+  fill-opacity: 0.96 !important;
+  opacity: 1 !important;
+  stroke: #786e65 !important;
+  stroke-width: 0.75px;
+}
+
+.node .label text,
+.node .label tspan {
+  stroke: rgba(10, 9, 13, 0.78) !important;
+  stroke-width: 1.1px;
+  stroke-linejoin: round;
+  paint-order: stroke fill;
+}
+
+.flowchart-link,
+.edgePath .path {
+  stroke: ${DARK_MERMAID_LINE} !important;
+  stroke-width: 1.75px;
+}
+
+.arrowMarkerPath {
+  fill: ${DARK_MERMAID_LINE} !important;
+  stroke: ${DARK_MERMAID_LINE} !important;
+}
+`
+
 let diagramSequence = 0
 
 export interface MermaidLabels {
@@ -32,16 +84,31 @@ export interface MermaidDiagramProps {
 function themeVariables(theme: Theme) {
   return theme === 'dark'
     ? {
+        darkMode: true,
         background: '#17151b',
         primaryColor: '#29252e',
-        primaryTextColor: '#f4efe7',
+        primaryTextColor: DARK_MERMAID_TEXT,
         primaryBorderColor: '#786e65',
         secondaryColor: '#1f2926',
+        secondaryTextColor: DARK_MERMAID_TEXT,
+        secondaryBorderColor: '#668b7d',
         tertiaryColor: '#302a24',
-        lineColor: '#b8aca1',
-        textColor: '#f4efe7',
+        tertiaryTextColor: DARK_MERMAID_TEXT,
+        tertiaryBorderColor: '#947c56',
+        lineColor: DARK_MERMAID_LINE,
+        arrowheadColor: DARK_MERMAID_LINE,
+        defaultLinkColor: DARK_MERMAID_LINE,
+        textColor: DARK_MERMAID_TEXT,
+        nodeTextColor: DARK_MERMAID_TEXT,
+        titleColor: DARK_MERMAID_TEXT,
+        edgeLabelBackground: DARK_MERMAID_LABEL_BACKGROUND,
+        labelTextColor: DARK_MERMAID_TEXT,
+        signalTextColor: DARK_MERMAID_TEXT,
+        transitionLabelColor: DARK_MERMAID_TEXT,
+        relationLabelColor: DARK_MERMAID_TEXT,
+        relationLabelBackground: DARK_MERMAID_LABEL_BACKGROUND,
         noteBkgColor: '#302a24',
-        noteTextColor: '#f4efe7',
+        noteTextColor: DARK_MERMAID_TEXT,
         noteBorderColor: '#9d8b72',
       }
     : {
@@ -83,6 +150,7 @@ export function MermaidDiagram({ source, theme, labels }: MermaidDiagramProps) {
           securityLevel: 'strict',
           theme: 'base',
           themeVariables: themeVariables(theme),
+          ...(theme === 'dark' ? { themeCSS: DARK_MERMAID_THEME_CSS } : {}),
           flowchart: { htmlLabels: false },
         })
         return mermaid.render(`${diagramId}-${currentRequest}`, source)

@@ -42,8 +42,25 @@ describe('Mermaid diagrams', () => {
       startOnLoad: false,
       securityLevel: 'strict',
       theme: 'base',
-      themeVariables: expect.objectContaining({ primaryTextColor: '#f4efe7' }),
+      themeVariables: expect.objectContaining({
+        darkMode: true,
+        primaryTextColor: '#fff8f0',
+        secondaryTextColor: '#fff8f0',
+        tertiaryTextColor: '#fff8f0',
+        nodeTextColor: '#fff8f0',
+        edgeLabelBackground: '#111015',
+        lineColor: '#d8cec3',
+        defaultLinkColor: '#d8cec3',
+      }),
+      themeCSS: expect.stringContaining('.edgeLabel .label text'),
     }))
+    const darkConfig = mermaidMocks.initialize.mock.calls[0]?.[0]
+    expect(darkConfig.themeCSS).toContain('fill: #fff8f0 !important')
+    expect(darkConfig.themeCSS).toContain('background-color: #111015 !important')
+    expect(darkConfig.themeCSS).toContain('.node .label text')
+    expect(darkConfig.themeCSS).toContain('paint-order: stroke fill')
+    expect(darkConfig.themeCSS).toContain('.flowchart-link')
+    expect(darkConfig.themeCSS).toContain('stroke: #d8cec3 !important')
     expect(screen.getByText('diagram')).toBeInTheDocument()
   })
 
@@ -64,6 +81,8 @@ describe('Mermaid diagrams', () => {
         noteBkgColor: '#e8dfc9',
       }),
     }))
+    const lightConfig = mermaidMocks.initialize.mock.calls.at(-1)?.[0]
+    expect(lightConfig).not.toHaveProperty('themeCSS')
   })
 
   it('falls back to the original source after a render failure', async () => {
