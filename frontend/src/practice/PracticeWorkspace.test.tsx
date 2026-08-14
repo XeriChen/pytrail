@@ -76,6 +76,30 @@ describe('practice workspace', () => {
     expect(editor).toHaveValue(DETAIL.starter_code)
   })
 
+  it('expands the editor without losing code and exits by button or Escape', async () => {
+    mount(true)
+    const editor = await screen.findByRole('textbox', { name: 'Python 代码' })
+    const editedCode = 'def filter_and_square(numbers, minimum):\n    return [4]'
+    fireEvent.change(editor, { target: { value: editedCode } })
+
+    fireEvent.click(screen.getByRole('button', { name: '全屏编辑' }))
+    expect(screen.getByRole('dialog', { name: '代码编辑器' })).toHaveClass('is-fullscreen')
+    expect(document.body).toHaveStyle({ overflow: 'hidden' })
+    expect(document.body).toHaveClass('practice-editor-fullscreen')
+    expect(editor).toHaveValue(editedCode)
+
+    fireEvent.click(screen.getByRole('button', { name: '退出全屏' }))
+    expect(screen.queryByRole('dialog', { name: '代码编辑器' })).not.toBeInTheDocument()
+    expect(document.body.style.overflow).toBe('')
+    expect(document.body).not.toHaveClass('practice-editor-fullscreen')
+
+    fireEvent.click(screen.getByRole('button', { name: '全屏编辑' }))
+    fireEvent.keyDown(document, { key: 'Escape' })
+    const fullscreenButton = screen.getByRole('button', { name: '全屏编辑' })
+    expect(fullscreenButton).toHaveFocus()
+    expect(editor).toHaveValue(editedCode)
+  })
+
   it('ignores a completed run after navigating to another exercise', async () => {
     let resolveRun: ((response: Response) => void) | undefined
     const pendingRun = new Promise<Response>((resolve) => { resolveRun = resolve })

@@ -88,7 +88,28 @@ npm test
 npm run build
 ```
 
-需要浏览器验收时，至少覆盖 `/`、课程阅读页、`/practice` 和一个 `/practice/:slug`，并检查桌面与 390 px 左右窄屏、明暗主题、控制台错误和横向溢出。
+## 浏览器验收（Playwright）
+
+当前尚未配置 OpenCLI，不要将它作为浏览器验收前提。统一使用 Playwright；`frontend/package.json` 当前未固定 Playwright 依赖，一次性验收可通过 `npx` 运行。除非需求明确要建立长期 E2E 测试，否则不要为此修改依赖或锁文件。
+
+```powershell
+cd frontend
+npx --yes playwright --version
+# 仅在本机缺少浏览器时执行
+npx --yes playwright install chromium
+# 单页截图示例；将 PRACTICE_SLUG 替换为真实题目 slug
+npx --yes playwright screenshot --browser chromium --viewport-size "1440,900" --color-scheme dark http://127.0.0.1:5173/practice/PRACTICE_SLUG "$env:TEMP\pytrail-practice.png"
+```
+
+涉及点击、输入或键盘操作时，使用 Playwright API 的 `chromium.launch()`、`page.goto()` 和 locator 完成流程；上面的 CLI 截图命令只用于快速查看和留存证据。
+
+验收流程：
+
+1. 先启动 API `8000` 和 Web `5173`，确认目标 URL 与相关 API 返回成功。
+2. 至少覆盖 `/`、课程阅读页、`/practice` 和一个 `/practice/:slug`；按改动范围执行真实点击、输入、导航和键盘操作。
+3. 分别检查桌面视口和约 `390 px` 窄屏，并覆盖明色、暗色主题。主题可通过界面切换，或在页面加载前设置 `localStorage` 键 `pytrail_theme`。
+4. 记录 `console error`、`pageerror` 和 HTTP `>= 400` 响应；同时比较 `scrollWidth` 与视口宽度，确认页面和目标控件没有横向溢出或遮挡。
+5. 对关键状态截图并目视复核。一次性 Playwright 脚本、截图和 HAR 放在系统临时目录，验收后不要提交到仓库。
 
 ## 修改与交付检查
 
