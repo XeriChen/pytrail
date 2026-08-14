@@ -141,6 +141,21 @@ describe('on-demand course and lesson workflow', () => {
     expect(screen.getByRole('button', { name: '切换至深色主题' })).toBeInTheDocument()
   })
 
+  it('exposes password-manager semantics for login and registration', async () => {
+    await mount()
+    await waitFor(() => expect(screen.getAllByTestId('course-card')).toHaveLength(9))
+    fireEvent.click(screen.getByTestId('nav-signin'))
+
+    const email = document.querySelector<HTMLInputElement>('.auth-modal input[name="email"]')!
+    const password = document.querySelector<HTMLInputElement>('.auth-modal input[name="password"]')!
+    expect(email.autocomplete).toBe('email')
+    expect(password.autocomplete).toBe('current-password')
+
+    fireEvent.click(document.querySelector<HTMLButtonElement>('.switch-auth')!)
+    expect(document.querySelector<HTMLInputElement>('.auth-modal input[name="name"]')?.autocomplete).toBe('name')
+    expect(password.autocomplete).toBe('new-password')
+  })
+
   it('fetches course detail and then the first lesson when a card is opened', async () => {
     await mount()
     await waitFor(() => expect(screen.getAllByTestId('course-card')).toHaveLength(9))

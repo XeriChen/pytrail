@@ -142,7 +142,7 @@ function TrailCanvas({ pointer, theme }: { pointer: Vec; theme: Theme }) {
         ctx.stroke()
         particleIndex += 1
       }
-      frame = requestAnimationFrame(tick)
+      if (!reduce) frame = requestAnimationFrame(tick)
     }
     frame = requestAnimationFrame(tick)
     return () => {
@@ -919,9 +919,9 @@ function AuthModal({ onClose, onAuth }: { onClose: () => void; onAuth: (user: Us
         <h2>{mode === 'login' ? tx('auth.welcome') : tx('auth.start')}</h2>
         <p className="lede">{mode === 'login' ? tx('auth.continue') : tx('auth.createHint')}</p>
         <form onSubmit={submit}>
-          {mode === 'register' && <input value={name} onChange={(e) => setName(e.target.value)} placeholder={tx('auth.name')} required />}
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={tx('auth.email')} required />
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={tx('auth.password')} required minLength={8} />
+          {mode === 'register' && <input name="name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} placeholder={tx('auth.name')} required />}
+          <input name="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={tx('auth.email')} required />
+          <input name="password" type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder={tx('auth.password')} required minLength={8} />
           {error && <p className="error">{error}</p>}
           <button className="primary-btn full" type="submit">
             {mode === 'login' ? tx('auth.login') : tx('auth.register')} <ChevronRight size={17} />

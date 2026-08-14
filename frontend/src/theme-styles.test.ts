@@ -35,4 +35,17 @@ describe('mineral light theme', () => {
     expect(contrast(hexToken('paper-dim'), hexToken('ink'))).toBeGreaterThan(4.5)
     expect(contrast(hexToken('code-text'), hexToken('surface-code'))).toBeGreaterThan(4.5)
   })
+
+  it('applies material treatments to interactive reader surfaces', () => {
+    expect(css).toContain("[data-theme='light'] .course-card:hover")
+    expect(css).toContain("[data-theme='light'] .display-zh")
+    expect(css).toContain('color: var(--code-text)')
+    expect(css).toContain('background: var(--diagram-toolbar)')
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.course-card/)
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.spin,[\s\S]*\.mermaid-loading span \{ animation: none; \}/)
+    expect(css).toContain(':is(.course-card:hover, .practice-card:hover)')
+    const letterSpacing = [...css.matchAll(/letter-spacing:\s*([^;]+);/g)]
+      .map((match) => match[1].trim())
+    expect(new Set(letterSpacing)).toEqual(new Set(['0']))
+  })
 })
