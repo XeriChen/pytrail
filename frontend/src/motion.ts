@@ -12,6 +12,13 @@ export type Particle = {
   hue: number
 }
 
+type ParticleTheme = 'light' | 'dark'
+
+const PARTICLE_RGB: Record<ParticleTheme, readonly [string, string, string, string]> = {
+  dark: ['226, 58, 40', '201, 162, 39', '212, 255, 74', '87, 190, 208'],
+  light: ['184, 58, 44', '138, 105, 28', '39, 107, 87', '44, 103, 112'],
+}
+
 export function springStep(
   pos: number,
   vel: number,
@@ -54,7 +61,7 @@ export function createParticles(count: number, width: number, height: number): P
       oy: (i % 13) - 6,
       life: 0.35 + (i % 8) * 0.08,
       size: 1.1 + (i % 5) * 0.55,
-      hue: i % 3,
+      hue: i % 4,
     }
   })
 }
@@ -83,10 +90,9 @@ export function stepScene(
   return particles.map((p) => stepParticle(p, pointer, clamped, bounds))
 }
 
-export function particleColor(hue: number, alpha = 0.72): string {
-  if (hue === 0) return `rgba(226, 58, 40, ${alpha})`
-  if (hue === 1) return `rgba(201, 162, 39, ${alpha})`
-  return `rgba(212, 255, 74, ${alpha})`
+export function particleColor(hue: number, alpha = 0.72, theme: ParticleTheme = 'dark'): string {
+  const palette = PARTICLE_RGB[theme]
+  return `rgba(${palette[Math.abs(hue) % palette.length]}, ${alpha})`
 }
 
 export function cursorRing(current: Vec, velocity: Vec, pointer: Vec, dt: number): { pos: Vec; vel: Vec } {
