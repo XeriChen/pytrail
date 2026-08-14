@@ -1,61 +1,61 @@
 # PyTrail
 
-PyTrail is a modern, responsive Python learning platform built as a small full-stack monorepo.
+PyTrail 是一个面向 Python 学习路径的全栈应用。它将 9 门课程、102 个课时和 36 道章节关联函数题组织为两个互相联通但独立的体验：课程阅读器与练习场。
 
-## Stack
+当前仓库以本地开发和小规模部署为目标。课程内容与练习清单在 API 启动时同步到数据库，前端按需加载课程、课时和题目。
 
-- Web: React 19, TypeScript 7, Vite 8, React Router, CodeMirror 6, React Markdown, Prism, Mermaid, Lucide icons
-- API: FastAPI, SQLAlchemy 2, Pydantic 2, RestrictedPython, JWT authentication, SQLite by default
-- Production database: set `DATABASE_URL` to a PostgreSQL connection string such as `postgresql+psycopg://user:password@host/db`
-- Course content: 9 courses / 102 lessons plus 36 curriculum-linked function exercises synced into SQLite at startup
-- Delivery: Docker Compose for local deployment and GitHub Actions for CI
+## 核心能力
 
-## Structure
+- 课程目录与按需阅读，支持 Markdown、GFM 表格、本地资源、语法高亮和 Mermaid。
+- 明暗主题、响应式布局、移动端阅读与练习工作台。
+- 独立练习场：`/practice` 题库和 `/practice/:slug` 双栏工作台。
+- 36 道函数题精确关联课程章节，支持课程、课时、难度、标签和进度筛选。
+- JWT 登录、课程进度、练习状态、尝试次数和最近代码保存。
+- RestrictedPython 子进程运行器，带源码大小、超时、输入输出和速率限制。
+
+## 技术栈
+
+| 层 | 技术 |
+| --- | --- |
+| 前端 | React 19、TypeScript 7、Vite 8、React Router、CodeMirror 6 |
+| 内容渲染 | React Markdown、rehype-sanitize、Prism、Mermaid |
+| 后端 | FastAPI、SQLAlchemy 2、Pydantic 2、JWT、RestrictedPython |
+| 数据库 | 本地默认 SQLite，生产可使用 PostgreSQL |
+| 交付 | Docker Compose、GitHub Actions |
+
+## 仓库结构
 
 ```text
 .
-├── backend/
-│   ├── app/
-│   │   ├── auth.py        # password hashing, JWT, current-user dependency
-│   │   ├── course_sync.py  # content-tree -> DB sync, content index
-│   │   ├── database.py    # SQLAlchemy engine/session
-│   │   ├── main.py        # REST endpoints
-│   │   ├── models.py      # User, Course, Lesson, Exercise, Progress
-│   │   ├── practice_runner.py # isolated restricted function runner
-│   │   ├── practice_service.py # catalog filters and learner progress
-│   │   └── schemas.py     # Pydantic request/response models
-│   ├── content/          # Markdown courses and curated practice manifests
-│   ├── Dockerfile
-│   ├── pyproject.toml   # project metadata and dependencies
-│   └── uv.lock          # reproducible dependency lockfile
-├── frontend/
-│   ├── src/main.tsx       # app shell, views, auth and API client
-│   ├── src/markdown.tsx   # sanitized markdown, highlighted code, diagrams
-│   ├── src/practice/      # routed catalog and split exercise workspace
-│   ├── src/theme.ts       # system-aware persisted light/dark theme
-│   ├── src/styles.css     # responsive light and dark UI
-│   └── package.json
-├── docker-compose.yml
-└── .github/workflows/ci.yml
+|-- AGENTS.md                         # agent 与维护者协作约定
+|-- backend/
+|   |-- app/                          # API、同步、模型、运行器
+|   |-- content/python-100-days/      # 课程 Markdown 与 res/ 资源
+|   |-- content/practice/             # 9 份练习清单
+|   `-- tests/                        # 后端回归测试
+|-- frontend/
+|   |-- public/                       # 静态资源
+|   `-- src/                          # 应用、阅读器、主题和练习场
+|-- docs/                             # 当前维护手册与历史设计记录
+|-- scripts/                          # 本地辅助脚本
+`-- docker-compose.yml
 ```
 
-## Run locally
+详细索引见 [docs/README.md](docs/README.md)。
 
-### API
+## 本地启动
+
+需要 Python 3.14、[uv](https://docs.astral.sh/uv/) 和 Node.js 24。
+
+启动 API：
 
 ```bash
 cd backend
-uv sync
+uv sync --locked
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
-`uv sync` creates and manages the local `.venv` automatically. Add or update dependencies with `uv add <package>` and refresh the lockfile with `uv lock`.
-
-At startup the API reads the Markdown course tree under `backend/content/python-100-days/` and the nine manifests under `backend/content/practice/`, then syncs both into the database with an idempotent single-transaction rebuild. To point at an alternative course location, set `COURSE_CONTENT_ROOT` to an absolute path before launch.
-
-This release intentionally uses a fresh schema and contains no compatibility migration for older local databases. Start it with a newly created database. When course Markdown or a practice manifest changes, the catalog is rebuilt transactionally and both lesson and exercise progress are cleared; user accounts are preserved.
-
-### Web
+另开终端启动前端：
 
 ```bash
 cd frontend
@@ -63,41 +63,73 @@ npm ci
 npm run dev
 ```
 
-Open `http://localhost:5173`. The API Swagger docs are available at `http://localhost:8000/docs`.
+访问地址：
 
-The practice lab lives at `/practice`. It offers 36 public function exercises, four for each course, with search and curriculum/difficulty/tag/progress filters. `/practice/:slug` opens a dedicated statement/editor/results workspace. Browsing is public; running code and saving the current status, attempt count, and latest code require login.
+- 应用：`http://localhost:5173`
+- 练习场：`http://localhost:5173/practice`
+- API 文档：`http://localhost:8000/docs`
+- 健康检查：`http://localhost:8000/api/health`
 
-The reader follows the operating-system light/dark preference until a theme is selected from the sidebar, then saves that explicit choice locally. Fenced code blocks are highlighted with language labels and copy controls. Python, Shell/Bash, SQL/Hive, HTML/XML, JSON, JavaScript, INI, Java, PowerShell, Dockerfile, and Nginx aliases are recognized; unknown languages remain readable plain text.
+Vite 默认将 `/api` 代理到 `http://127.0.0.1:8000`。
 
-Fenced `mermaid` blocks render client-side with theme-aware colors, bounded zoom, reset, and full-screen controls. Mermaid is loaded only when a diagram is present and uses `securityLevel: "strict"`; invalid diagrams fall back to their original source.
-
-For LAN access, open `http://<host-ip>:5173`. Vite proxies same-origin `/api` requests to FastAPI. On Windows, run `scripts/configure-windows-lan.ps1` as Administrator once to mark the active network as private and allow TCP ports 5173 and 8000 from the local subnet.
-
-## Docker deployment
+## Docker
 
 ```bash
 docker compose up --build
 ```
 
-For production, replace the SQLite URL with PostgreSQL, set a long random `SECRET_KEY`, set `PYTRAIL_ENV=production`, restrict `CORS_ORIGINS`, and serve the Vite build behind an HTTPS reverse proxy. A managed Postgres database plus a container platform (Render, Fly.io, ECS, or Kubernetes) works with the same environment variables.
+Compose 适合本地联调。生产环境必须设置强随机 `SECRET_KEY`、`PYTRAIL_ENV=production`、受限的 `CORS_ORIGINS`，并通过 HTTPS 反向代理提供前端构建产物。
 
-A known-default `SECRET_KEY` (`dev-only-change-me`, or the old compose placeholder) prints a conspicuous warning in development and **refuses to start** when `PYTRAIL_ENV=production` (or `ENV=production`). Compose reads `SECRET_KEY` from the host environment / `.env` and falls back to the demo default so `docker compose up` still works locally.
+## 配置
 
-Login and register are rate-limited per client IP (5 attempts per minute) to slow credential stuffing.
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `DATABASE_URL` | `sqlite:///./learning.db` | SQLAlchemy 数据库连接 |
+| `COURSE_CONTENT_ROOT` | `backend/content/python-100-days` | 课程内容根目录，建议使用绝对路径覆盖 |
+| `SECRET_KEY` | `dev-only-change-me` | JWT 密钥；生产环境禁止使用默认值 |
+| `PYTRAIL_ENV` | `development` | `production`/`prod` 会启用密钥强校验 |
+| `CORS_ORIGINS` | `http://localhost:5173` | 逗号分隔的允许来源 |
+| `VITE_API_URL` | `/api` | 前端请求 API 的基础路径 |
+| `VITE_API_PROXY_TARGET` | `http://127.0.0.1:8000` | Vite 开发代理目标 |
 
-Practice runs are limited to 20 per minute for each user/IP pair. A submission may contain at most 12 KB of Python and receives a two-second total timeout. Only deterministic function implementations and a curated builtin set are available. Imports, files, network access, process creation, interactive input, private attribute traversal, and dynamic evaluation are rejected. The runner evaluates only the public examples shown in the workspace; there are no hidden tests, rankings, or submission history.
+## 内容同步与数据约束
 
-## API surface
+API 启动时会读取：
 
-- `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/me`
-- `GET /api/courses` (summary list), `GET /api/courses/{id}` (course + lesson summaries)
-- `GET /api/lessons/{id}` (full lesson markdown + exercises + asset base URL + lesson links)
-- `GET /api/course-assets/{course_slug}/{path}` (serves images and other assets from a course's `res/` tree)
-- `GET /api/dashboard`, `POST /api/progress`
-- `POST /api/exercises/{id}/submit`
-- `GET /api/practice/exercises` (public searchable/filterable paginated catalog)
-- `GET /api/practice/exercises/{slug}` (public statement, signature, starter code, and examples)
-- `POST /api/practice/exercises/{slug}/run` (authenticated restricted public-example run and progress update)
-- `POST /api/execute` (requires a signed-in user; 2 second timeout, 4 KB code limit for the demo runner)
+- `backend/content/python-100-days/` 下的课程 Markdown 和 `res/` 资源；
+- `backend/content/practice/<course-slug>.json` 下的练习清单。
 
-The legacy lesson playground at `/api/execute` remains a local-demo implementation and is not used by the practice lab. The practice runner uses RestrictedPython in a separate child process with bounded JSON input/output and a hard timeout. For hostile public deployment, move execution into isolated ephemeral containers or a sandbox service with OS-level CPU, memory, filesystem, and network limits.
+同步先在内存中完整解析和校验内容。如果数据库内容完全一致，不会写库；如果课程 Markdown 或练习清单发生变化，会在一个事务中重建课程、课时、题目、案例和标签，并清空课程进度与练习进度，但保留用户账号。
+
+当前版本明确采用全新 schema，不维护旧数据库兼容层。课程 URL 使用 slug，练习 URL 使用稳定题目 slug，练习与课时的绑定使用 `lesson_source_path`；不要把数据库自增 ID 当作长期内容标识。
+
+内容维护流程见 [课程内容维护](docs/content-maintenance.md) 和 [练习题维护](docs/practice-maintenance.md)。
+
+## 验证命令
+
+```bash
+# 后端
+cd backend
+uv run python -m unittest discover -s tests -v
+
+# 前端
+cd frontend
+npm test
+npm run build
+```
+
+CI 使用相同的测试与构建入口。完整的验证矩阵和排障方法见 [开发与运维](docs/development.md)。
+
+## 安全边界
+
+练习场运行器只面向受控的函数题，执行前要求登录，并限制为每个用户/IP 每分钟 20 次。提交源码最大 12 KB，总执行超时 2 秒。导入、文件、网络、子进程、动态求值和私有属性遍历会被拒绝。
+
+RestrictedPython 子进程不是面向敌对公网流量的完整强隔离沙箱。对外开放时，应把代码执行迁移到独立的临时容器或专用沙箱服务。旧的 `/api/execute` 仅供课内本地演示，不属于练习场运行链路。
+
+## 维护文档
+
+- [架构说明](docs/architecture.md)
+- [开发与运维](docs/development.md)
+- [课程内容维护](docs/content-maintenance.md)
+- [练习题维护](docs/practice-maintenance.md)
+- [Agent 协作规则](AGENTS.md)
