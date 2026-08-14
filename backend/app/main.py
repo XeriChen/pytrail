@@ -9,19 +9,26 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, load_only, selectinload
 from .auth import create_token, current_user, enforce_secret_key_policy, hash_password, is_production_environment, optional_current_user, verify_password
 from .database import Base, SessionLocal, engine, get_db
-from .metrics import as_utc_date, compute_streak
-from .models import Course, Exercise, Lesson, Progress, User
-from .practice_runner import MAX_SOURCE_BYTES, PracticeCaseInput, PracticeRunError, PracticeRunnerUnavailable, run_practice
+from .dashboard_service import build_dashboard
+from .models import Course, Exercise, Lesson, User
+from .practice_feedback import classify_result
+from .practice_runner import (
+    MAX_SOURCE_BYTES,
+    PracticeCaseInput,
+    PracticeRunError,
+    PracticeRunnerUnavailable,
+    run_practice,
+)
 from .practice_service import DIFFICULTIES, STATUSES, exercise_detail, get_exercise, list_exercises, record_run
 from .progress_service import upsert_lesson_progress
 from .ratelimit import auth_limiter, practice_limiter
 from .course_sync import ContentSyncError, resolve_content_root, sync_courses
-from .schemas import CourseDetailOut, CourseSummaryOut, ExecuteIn, ExerciseOut, ExerciseSubmit, LessonDetailOut, LessonSummaryOut, LoginRequest, PracticeCatalogOut, PracticeDetailOut, PracticeProgressOut, PracticeRunIn, PracticeRunOut, ProgressIn, Token, UserCreate, UserOut
+from .schemas import CourseDetailOut, CourseSummaryOut, DashboardOut, ExecuteIn, ExerciseOut, ExerciseSubmit, LessonDetailOut, LessonSummaryOut, LoginRequest, PracticeCatalogOut, PracticeDetailOut, PracticeProgressOut, PracticeRunIn, PracticeRunOut, ProgressIn, Token, UserCreate, UserOut
 
 
 @asynccontextmanager
@@ -233,6 +240,7 @@ def run_practice_exercise(
         result = {"ok": False, "passed": False, "passed_count": 0, "total_count": len(cases), "error": str(exc), "cases": []}
     except (OSError, PracticeRunnerUnavailable) as exc:
         raise HTTPException(503, "Practice runner unavailable") from exc
+    result["feedback_category"] = classify_result(result)
     progress = record_run(db, user, exercise, payload.code, bool(result["passed"]))
     result["progress"] = PracticeProgressOut.model_validate(progress, from_attributes=True)
     return result
@@ -261,16 +269,9 @@ def course_asset(course_slug: str, asset_path: str):
     return FileResponse(candidate, media_type=mimetypes.guess_type(candidate.name)[0] or "application/octet-stream")
 
 
-@app.get("/api/dashboard")
+@app.get("/api/dashboard", response_model=DashboardOut)
 def dashboard(user: User = Depends(current_user), db: Session = Depends(get_db)):
-    total = db.scalar(select(func.count(Lesson.id))) or 0
-    completed = db.scalar(select(func.count(Progress.id)).where(Progress.user_id == user.id, Progress.completed.is_(True))) or 0
-    avg_score = db.scalar(select(func.avg(Progress.score)).where(Progress.user_id == user.id)) or 0
-    stamps = db.scalars(
-        select(Progress.updated_at).where(Progress.user_id == user.id, Progress.completed.is_(True))
-    ).all()
-    streak = compute_streak([as_utc_date(stamp) for stamp in stamps if stamp])
-    return {"lessons_total": total, "lessons_completed": completed, "completion": round((completed / total) * 100) if total else 0, "average_score": round(avg_score), "streak": streak}
+    return build_dashboard(db, user)
 
 
 @app.post("/api/progress")

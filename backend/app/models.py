@@ -59,6 +59,7 @@ class Exercise(Base):
     order: Mapped[int] = mapped_column(Integer, default=1)
     prompt: Mapped[str] = mapped_column(Text)
     starter_code: Mapped[str] = mapped_column(Text, default="")
+    hints_json: Mapped[str] = mapped_column(Text, default="[]")
     expected_answer: Mapped[str] = mapped_column(String(160), default="")
     lesson: Mapped[Lesson] = relationship(back_populates="exercises")
     cases: Mapped[list["ExerciseCase"]] = relationship(

@@ -43,6 +43,7 @@ flowchart LR
 - `backend/app/practice_manifest.py`：练习清单解析与完整性校验。
 - `backend/app/practice_service.py`：题库筛选、详情序列化和原子进度 upsert。
 - `backend/app/progress_service.py`：课时进度的方言原子 upsert（SQLite / PostgreSQL）。
+- `backend/app/dashboard_service.py`：今日任务、有效学习日和最近活动聚合。
 - `backend/app/practice_runner.py`：主进程校验、子进程调度、超时和协议边界。
 - `backend/app/practice_worker.py`：RestrictedPython 执行与案例比较。
 - `backend/app/models.py`：SQLAlchemy 数据模型。
@@ -73,7 +74,7 @@ erDiagram
   Lesson ||--o{ Exercise : contains
   Exercise ||--o{ ExerciseCase : evaluates
   Exercise }o--o{ Tag : tagged
-  Exercise ||--o{ ExerciseProgress : tracks
+  Exercise }o--o{ ExerciseProgress : tracks
   Lesson ||--o{ Progress : tracks
 ```
 
@@ -90,17 +91,18 @@ erDiagram
 
 1. `GET /api/courses` 返回轻量课程摘要。
 2. 选择课程后，`GET /api/courses/{id}` 返回课时摘要，不包含 Markdown。
-3. 选择课时后，`GET /api/lessons/{id}` 返回 Markdown、速测、资源基础 URL、内部课时链接和 `practice_count`。
-4. 前端使用 sanitized renderer 展示正文，并将已索引的 Markdown 课时链接转换为应用内导航。
+3. 登录用户的 `GET /api/dashboard` 返回课程统计、有效学习日 streak、最近 7 天活动和一个透明规则生成的今日任务。
+4. 选择课时后，`GET /api/lessons/{id}` 返回 Markdown、速测、资源基础 URL、内部课时链接和 `practice_count`。
+5. 前端使用 sanitized renderer 展示正文，并将已索引的 Markdown 课时链接转换为应用内导航。
 
 ### 练习场
 
 1. `GET /api/practice/exercises` 返回公开题库、筛选 facets 和可选登录进度。
-2. `GET /api/practice/exercises/{slug}` 返回题面、签名、官方模板、公开案例和可选 `progress.last_code`。
+2. `GET /api/practice/exercises/{slug}` 返回题面、签名、官方模板、最多三层提示、公开案例和可选 `progress.last_code`。
 3. 前端使用最近代码初始化编辑器；没有进度时使用官方模板。
 4. 登录用户调用 `POST /api/practice/exercises/{slug}/run`。
 5. API 校验请求并启动隔离子进程执行全部公开案例。
-6. 只有获得正常练习结果时才原子更新尝试次数、最近代码和状态。基础设施 `503` 不写进度。
+6. 只有获得正常练习结果时才原子更新尝试次数、最近代码和状态；结果同时包含稳定的反馈分类。基础设施 `503` 不写进度。
 7. 已通过状态不会被后续失败运行降级。
 
 ### 身份认证
@@ -135,4 +137,5 @@ erDiagram
 - 内容同步采用全量重建，适合当前无生产历史数据阶段。
 - 题库规模固定且较小，后端在内存中完成 36 道题的搜索、筛选和分页。
 - 所有案例均为公开案例，没有隐藏测试、排行榜、提交历史或多语言运行器。
+- 今日任务使用透明的数据库聚合规则；有效学习日包括课时完成、速测答对和函数练习通过，失败练习不增加 streak。
 - `/api/execute` 是旧课程演示入口，默认关闭：只有显式设置 `PYTRAIL_ENABLE_LEGACY_EXECUTE=1` 且环境不是生产时才存在，其余情况返回 404。它用 `python -I -c` 直接执行，隔离强度低于练习运行器，启用仅限本地开发演示，不应对不可信公网用户开放。

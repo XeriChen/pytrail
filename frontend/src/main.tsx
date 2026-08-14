@@ -5,7 +5,9 @@ import {
   ArrowLeft,
   ArrowRight,
   BookOpen,
+  CheckCircle2,
   ChevronRight,
+  Clock3,
   CirclePlay,
   Code2,
   Flame,
@@ -52,7 +54,8 @@ type LessonSummary = { id: number; title: string; order: number; duration: numbe
 type CourseDetail = CourseSummary & { lessons: LessonSummary[] }
 type LessonDetail = LessonSummary & { course_id: number; course_slug: string; markdown: string; exercises: Exercise[]; asset_base_url: string; lesson_links: Record<string, number> }
 type User = { id: number; name: string; email: string }
-type Dashboard = { lessons_total: number; lessons_completed: number; completion: number; average_score: number; streak: number }
+type TodayTask = { kind: 'lesson' | 'practice'; slug?: string | null; lesson_id: number; title: string; course_title: string; lesson_title: string; reason: string; reason_code: 'resume_practice' | 'start_lesson' | 'review_practice'; estimated_minutes: number; completed: boolean }
+type Dashboard = { lessons_total: number; lessons_completed: number; completion: number; average_score: number; streak: number; today_task?: TodayTask | null; recent_activity?: string[] }
 type Tab = 'overview' | 'course' | 'practice'
 type LoadState = 'idle' | 'loading' | 'success' | 'error' | 'empty'
 
@@ -144,7 +147,7 @@ function AppShell() {
   const practiceRoute = location.pathname.startsWith('/practice')
   const [locale, setLocaleState] = useState<Locale>(() => readLocale(typeof localStorage === 'undefined' ? null : localStorage))
   const [user, setUser] = useState<User | null>(null)
-  const [dashboard, setDashboard] = useState<Dashboard>({ lessons_total: 0, lessons_completed: 0, completion: 0, average_score: 0, streak: 0 })
+  const [dashboard, setDashboard] = useState<Dashboard>({ lessons_total: 0, lessons_completed: 0, completion: 0, average_score: 0, streak: 0, today_task: null, recent_activity: [] })
   const [tab, setTab] = useState<Tab>('overview')
   const [authOpen, setAuthOpen] = useState(false)
   const [mobileNav, setMobileNav] = useState(false)
@@ -275,10 +278,19 @@ function AppShell() {
     setMobileNav(false)
   }
 
+  const openTask = (task: TodayTask) => {
+    if (task.kind === 'practice' && task.slug) {
+      navigate(`/practice/${task.slug}`, { state: { from: '/' } })
+      setMobileNav(false)
+      return
+    }
+    openLesson({ id: task.lesson_id, title: task.lesson_title, order: 0, duration: task.estimated_minutes, has_exercises: false })
+  }
+
   const signOut = () => {
     localStorage.removeItem('pytrail_token')
     setUser(null)
-    setDashboard({ lessons_total: 0, lessons_completed: 0, completion: 0, average_score: 0, streak: 0 })
+    setDashboard({ lessons_total: 0, lessons_completed: 0, completion: 0, average_score: 0, streak: 0, today_task: null, recent_activity: [] })
   }
 
   const refreshDashboard = () => {
@@ -362,6 +374,7 @@ function AppShell() {
               catalogState={catalogState}
               dashboard={dashboard}
               openCourse={openCourse}
+              openTask={openTask}
               onRetry={loadCourses}
               pointer={pointer}
             />
@@ -473,6 +486,7 @@ function Overview({
   catalogState,
   dashboard,
   openCourse,
+  openTask,
   onRetry,
   pointer,
 }: {
@@ -480,6 +494,7 @@ function Overview({
   catalogState: LoadState
   dashboard: Dashboard
   openCourse: (course: CourseSummary) => void
+  openTask: (task: TodayTask) => void
   onRetry: () => void
   pointer: Vec
 }) {
@@ -500,6 +515,7 @@ function Overview({
           <CirclePlay size={18} /> {tx('overview.continue')}
         </button>
       </section>
+      {dashboard.today_task && <TodayTaskCard task={dashboard.today_task} onOpen={() => openTask(dashboard.today_task!)} />}
       <section className="stats-grid">
         <Stat label={tx('stats.progress')} value={`${dashboard.completion}%`} detail={tx('stats.progressDetail', { completed: dashboard.lessons_completed, total: dashboard.lessons_total })} icon={<BookOpen />} tone="cinnabar" pointer={pointer} />
         <Stat label={tx('stats.score')} value={`${dashboard.average_score || 0}%`} detail={tx('stats.scoreDetail')} icon={<Trophy />} tone="gold" pointer={pointer} />
@@ -522,6 +538,34 @@ function Overview({
         </div>
       )}
     </div>
+  )
+}
+
+function TodayTaskCard({ task, onOpen }: { task: TodayTask; onOpen: () => void }) {
+  const { tx } = useI18n()
+  const reasonKey = task.reason_code === 'resume_practice'
+    ? 'today.reason.resume'
+    : task.reason_code === 'review_practice'
+      ? 'today.reason.review'
+      : 'today.reason.start'
+  const taskIcon = task.kind === 'practice' ? <Code2 size={19} /> : <BookOpen size={19} />
+  return (
+    <section className="today-task" data-testid="today-task">
+      <div className="today-task-mark">{task.completed ? <CheckCircle2 size={22} /> : taskIcon}</div>
+      <div className="today-task-copy">
+        <p className="eyebrow">{tx('today.eyebrow')}</p>
+        <h2>{tx('today.heading')}</h2>
+        <strong>{task.title}</strong>
+        <span>{task.course_title} · {task.lesson_title}</span>
+        <p>{tx(reasonKey)}</p>
+      </div>
+      <div className="today-task-action">
+        <span><Clock3 size={14} /> {tx('today.minutes', { n: task.estimated_minutes })}</span>
+        <button className="secondary-btn" type="button" onClick={onOpen}>
+          {task.completed ? tx('today.review') : task.kind === 'practice' ? tx('today.practice') : tx('today.lesson')} <ChevronRight size={15} />
+        </button>
+      </div>
+    </section>
   )
 }
 

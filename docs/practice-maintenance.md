@@ -53,6 +53,11 @@ backend/content/practice/<course-slug>.json
         "returns": "list[int]"
       },
       "starter_code": "def filter_and_square(numbers: list[int], minimum: int) -> list[int]:\n    return []\n",
+      "hints": [
+        "先用一个公开样例手算输入和预期输出。",
+        "先拆解参数、条件和返回值，再选择 Python 结构。",
+        "伪代码：读取输入 → 处理 → 组织结果 → 返回，并检查边界情况。"
+      ],
       "cases": [
         {
           "args": [[1, 2, 3], 2],
@@ -82,6 +87,7 @@ backend/content/practice/<course-slug>.json
 | `function_name` | 合法且非关键字的公开 Python 标识符，不能以下划线开头 |
 | `signature.parameters` | 最多 8 个，名称唯一且合法 |
 | `starter_code` | 非空，最长 12,000 字符，必须定义目标函数 |
+| `hints` | 可选，0 至 3 条；每条非空且最长 4,000 字符，按思路、步骤、伪代码逐层展开 |
 | `cases` | 2 至 8 个公开案例 |
 | `comparison` | 可选，`exact` 或 `approximate` |
 | `tolerance` | 可选，大于 0 且不超过 1，默认 `1e-6` |
@@ -125,7 +131,7 @@ backend/content/practice/<course-slug>.json
 - 每个用户/IP 每分钟最多 20 次；
 - 只有登录用户可运行。
 
-所有案例都是公开案例。产品当前没有隐藏测试、得分、排名或提交历史，不要在文档或 UI 中暗示这些能力。
+所有案例都是公开案例。产品当前没有隐藏测试、排名或提交历史；运行结果会额外返回稳定的反馈分类，帮助前端显示温和、可操作的下一步建议。不要把反馈分类描述成对用户代码的完整诊断。
 
 ## 进度语义
 
@@ -136,12 +142,13 @@ backend/content/practice/<course-slug>.json
 - `last_code`：最近一次正常记录的提交代码；
 - `updated_at`。
 
-通过状态是单调的。后续失败会增加次数并更新最近代码，但状态仍为 `passed`。子进程不可用、协议错误等 `503` 不写进度。
+通过状态是单调的。后续失败会增加次数并更新最近代码，但状态仍为 `passed`。子进程不可用、协议错误等 `503` 不写进度。完成课时、答对速测或通过函数练习都属于有效学习活动；练习失败不增加 streak。
 
 详情 API 分别返回：
 
 - `starter_code`：始终是官方模板；
-- `progress.last_code`：登录用户最近代码。
+- `progress.last_code`：登录用户最近代码；
+- `hints`：最多三层静态提示，按用户主动点击逐层展示。
 
 前端编辑器优先使用 `progress.last_code`，否则使用 `starter_code`。重置操作只恢复官方模板，并在丢弃用户编辑前确认。
 
@@ -170,4 +177,8 @@ backend/content/practice/<course-slug>.json
 
 ### `POST /api/practice/exercises/{slug}/run`
 
-需要登录，请求体为 `{ "code": "..." }`。语法、签名、运行时异常、超时和错误答案返回结构化练习结果；鉴权、限流、大小限制、找不到题目和运行基础设施故障使用 HTTP 错误。
+需要登录，请求体为 `{ "code": "..." }`。语法、签名、运行时异常、超时和错误答案返回结构化练习结果，并包含 `feedback_category`：`all_passed`、`wrong_output`、`runtime_error` 或 `validation_error`；鉴权、限流、大小限制、找不到题目和运行基础设施故障使用 HTTP 错误。运行基础设施故障不会写入练习进度。
+
+### `GET /api/dashboard`
+
+需要登录。除课程完成数、平均得分和 streak 外，还返回一个透明规则生成的 `today_task` 和最近 7 天 `recent_activity`。有效学习日包括课时完成、速测答对和函数练习通过；今日任务优先引导未完成或未通过内容，其次引导复习。

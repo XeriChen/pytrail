@@ -16,11 +16,12 @@ const DETAIL = {
   prompt: '实现筛选与平方。', function_name: 'filter_and_square',
   signature: { parameters: [{ name: 'numbers', type: 'list[int]' }, { name: 'minimum', type: 'int' }], returns: 'list[int]' },
   starter_code: 'def filter_and_square(numbers, minimum):\n    return []\n',
+  hints: ['先手算一个样例。', '关注参数和过滤条件。', '伪代码：遍历 → 判断 → 平方 → 返回。'],
   cases: [{ order: 1, args: [[1, 2], 2], kwargs: {}, expected: [4], explanation: '保留 2', comparison: 'exact', tolerance: 0.000001 }],
 }
 
 const PASSED = {
-  ok: true, passed: true, passed_count: 1, total_count: 1, error: null,
+  ok: true, passed: true, passed_count: 1, total_count: 1, error: null, feedback_category: 'all_passed',
   cases: [{ order: 1, passed: true, expected: [4], actual: [4], duration_ms: 0.2 }],
   progress: { status: 'passed', attempts: 1, last_code: 'code', updated_at: '2026-08-14T00:00:00Z' },
 }
@@ -59,6 +60,29 @@ describe('practice workspace', () => {
     expect(await screen.findByText('全部通过')).toBeInTheDocument()
     expect(screen.getByText('[4]')).toBeInTheDocument()
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === 'POST')).toBe(true))
+  })
+
+  it('shows a classified failure and reveals layered hints on demand', async () => {
+    const failed = {
+      ...PASSED,
+      ok: true,
+      passed: false,
+      passed_count: 0,
+      feedback_category: 'wrong_output',
+      cases: [{ order: 1, passed: false, expected: [4], actual: [], duration_ms: 0.2 }],
+    }
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const body = init?.method === 'POST' ? failed : DETAIL
+      return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    }))
+    mount(true)
+    await screen.findByRole('textbox', { name: 'Python 代码' })
+    fireEvent.click(screen.getByRole('button', { name: '运行样例' }))
+    expect(await screen.findByText(/代码运行了，但结果和预期不同/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '查看第 1 层提示' }))
+    expect(screen.getByText('先手算一个样例。')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '查看第 2 层提示' }))
+    expect(screen.getByText('关注参数和过滤条件。')).toBeInTheDocument()
   })
 
   it('resumes saved code and resets to the canonical starter after confirmation', async () => {

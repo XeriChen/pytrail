@@ -40,6 +40,7 @@ class ExerciseSeed:
     function_name: str | None = None
     signature_json: str = "{}"
     tags: tuple[str, ...] = ()
+    hints: tuple[str, ...] = ()
     cases: tuple[PracticeCaseSeed, ...] = ()
 
 
@@ -147,6 +148,7 @@ def _programming_seed(seed: PracticeExerciseSeed) -> ExerciseSeed:
         function_name=seed.function_name,
         signature_json=_canonical_json(signature),
         tags=seed.tags,
+        hints=seed.hints,
         cases=seed.cases,
     )
 
@@ -349,6 +351,7 @@ def _exercise_seed_state(seed: ExerciseSeed, order: int) -> tuple[object, ...]:
         order,
         seed.prompt,
         seed.starter_code,
+        _canonical_json(list(seed.hints)),
         seed.expected_answer,
         tuple(sorted(seed.tags)),
         tuple(_case_seed_state(case, position) for position, case in enumerate(seed.cases, start=1)),
@@ -366,6 +369,7 @@ def _exercise_row_state(row: Exercise) -> tuple[object, ...]:
         row.order,
         row.prompt,
         row.starter_code,
+        row.hints_json,
         row.expected_answer,
         tuple(sorted(tag.slug for tag in row.tags)),
         tuple(_case_row_state(case) for case in sorted(row.cases, key=lambda item: item.order)),
@@ -524,6 +528,7 @@ def sync_courses(
                         order=order,
                         prompt=seed.prompt,
                         starter_code=seed.starter_code,
+                        hints_json=_canonical_json(list(seed.hints)),
                         expected_answer=seed.expected_answer,
                     )
                     exercise.cases = [

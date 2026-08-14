@@ -159,6 +159,7 @@ def exercise_detail(db: Session, exercise: Exercise, user: User | None) -> Pract
         function_name=exercise.function_name or "",
         signature=PracticeSignatureOut.model_validate(signature),
         starter_code=exercise.starter_code,
+        hints=json.loads(exercise.hints_json or "[]"),
         cases=[
             PracticeCaseOut(
                 order=case.order,

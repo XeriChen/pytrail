@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import { python } from '@codemirror/lang-python'
-import { ArrowLeft, BookOpen, CheckCircle2, CircleX, Code2, Maximize2, Minimize2, Play, RotateCcw, Terminal } from 'lucide-react'
+import { ArrowLeft, BookOpen, CheckCircle2, CircleX, Code2, Lightbulb, Maximize2, Minimize2, Play, RotateCcw, Terminal } from 'lucide-react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { apiRequest } from '../api'
-import type { Locale } from '../i18n'
+import { t, type Locale } from '../i18n'
 import type { Theme } from '../theme'
 import type { PracticeDetail, PracticeRunResult } from './types'
 
@@ -36,6 +36,7 @@ export function PracticeWorkspace({
   const [state, setState] = useState<'loading' | 'success' | 'error'>('loading')
   const [running, setRunning] = useState(false)
   const [result, setResult] = useState<PracticeRunResult | null>(null)
+  const [revealedHints, setRevealedHints] = useState(0)
   const [mobileTab, setMobileTab] = useState<'statement' | 'code' | 'results'>('statement')
   const [editorFullscreen, setEditorFullscreen] = useState(false)
   const [requestKey, setRequestKey] = useState(0)
@@ -51,6 +52,7 @@ export function PracticeWorkspace({
     setState('loading')
     setDetail(null)
     setResult(null)
+    setRevealedHints(0)
     apiRequest<PracticeDetail>(`/practice/exercises/${slug}`, {}, zhRef.current ? '题目加载失败' : 'Failed to load problem', controller.signal)
       .then((value) => { setDetail(value); setCode(value.progress?.last_code || value.starter_code); setState('success') })
       .catch((error) => { if (error.name !== 'AbortError') setState('error') })
@@ -110,7 +112,43 @@ export function PracticeWorkspace({
     if (code !== detail?.starter_code && !window.confirm(zh ? '放弃当前修改并恢复起始代码？' : 'Discard your changes and restore the starter code?')) return
     setCode(detail?.starter_code || '')
     setResult(null)
+    setRevealedHints(0)
   }
+
+function FeedbackPanel({
+  locale,
+  result,
+  hints,
+  revealedHints,
+  onRevealHint,
+}: {
+  locale: Locale
+  result: PracticeRunResult
+  hints: string[]
+  revealedHints: number
+  onRevealHint: () => void
+}) {
+  const category = result.feedback_category || (result.passed ? 'all_passed' : result.cases.some((item) => item.error) ? 'runtime_error' : 'wrong_output')
+  const copyKey = category === 'all_passed'
+    ? 'practice.feedback.allPassed'
+    : category === 'validation_error'
+      ? 'practice.feedback.validationError'
+      : category === 'runtime_error'
+        ? 'practice.feedback.runtimeError'
+        : 'practice.feedback.wrongOutput'
+  const visibleHints = hints.slice(0, revealedHints)
+  return (
+    <section className={`practice-feedback ${category}`} data-testid="practice-feedback">
+      <div className="feedback-title"><Lightbulb size={17} /><strong>{t(locale, 'practice.feedback.title')}</strong></div>
+      <p>{t(locale, copyKey)}</p>
+      {visibleHints.length > 0 && <div className="hint-list">{visibleHints.map((hint, index) => <p key={`${index}-${hint}`}><span>{index + 1}</span>{hint}</p>)}</div>}
+      <div className="feedback-footer">
+        {!result.passed && revealedHints < hints.length && hints.length > 0 && <button className="hint-btn" type="button" onClick={onRevealHint}>{t(locale, 'practice.feedback.showHint', { n: revealedHints + 1 })}</button>}
+        {result.passed && <span className="next-step"><CheckCircle2 size={15} />{t(locale, 'practice.feedback.nextStep')} · {t(locale, 'practice.feedback.review')}</span>}
+      </div>
+    </section>
+  )
+}
 
   if (state === 'loading') return <div className="practice-state workspace-state"><span className="state-spinner" />{zh ? '正在打开工作台' : 'Opening workspace'}</div>
   if (state === 'error' || !detail) return <div className="practice-state workspace-state"><p>{zh ? '题目暂时无法加载。' : 'This problem could not be loaded.'}</p><button className="secondary-btn" onClick={() => setRequestKey((value) => value + 1)}>{zh ? '重试' : 'Retry'}</button></div>
@@ -164,6 +202,7 @@ export function PracticeWorkspace({
         <aside className={`workspace-results ${mobileTab === 'results' ? 'mobile-active' : ''}`}>
           <div className="results-head"><span>{zh ? '运行结果' : 'Run results'}</span>{result && <strong className={result.passed ? 'passed' : 'failed'}>{result.passed ? (zh ? '全部通过' : 'All passed') : `${result.passed_count}/${result.total_count}`}</strong>}</div>
           {!result && <div className="results-empty"><Terminal size={24} /><p>{zh ? '运行代码后，这里会显示每个公开样例的结果。' : 'Run your code to inspect every public example.'}</p></div>}
+          {result && <FeedbackPanel locale={locale} result={result} hints={detail.hints || []} revealedHints={revealedHints} onRevealHint={() => setRevealedHints((value) => Math.min(value + 1, detail.hints?.length || 0))} />}
           {result?.error && <div className="runner-error"><CircleX size={18} /><span>{result.error}</span></div>}
           {result?.cases.map((item) => <article className={item.passed ? 'result-case passed' : 'result-case failed'} key={item.order}>{item.passed ? <CheckCircle2 size={18} /> : <CircleX size={18} />}<div><strong>{zh ? `样例 ${item.order}` : `Case ${item.order}`}</strong>{item.error ? <code>{item.error}</code> : <><small>{zh ? '实际结果' : 'Actual'}</small><code>{JSON.stringify(item.actual)}</code></>}<span>{item.duration_ms.toFixed(2)} ms</span></div></article>)}
         </aside>

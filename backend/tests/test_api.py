@@ -125,6 +125,7 @@ class ApiTests(unittest.TestCase):
         payload = detail.json()
         self.assertEqual(payload["function_name"], "prime_summary")
         self.assertEqual(len(payload["cases"]), 4)
+        self.assertEqual(len(payload["hints"]), 3)
         self.assertIn("expected", payload["cases"][0])
         self.assertNotIn("expected_answer", payload)
         self.assertEqual(self.client.get("/api/practice/exercises/not-found").status_code, 404)
@@ -140,14 +141,18 @@ class ApiTests(unittest.TestCase):
         failed = self.client.post(f"/api/practice/exercises/{slug}/run", headers=auth["headers"], json={"code": failed_code})
         self.assertEqual(failed.status_code, 200, failed.text)
         self.assertFalse(failed.json()["passed"])
+        self.assertEqual(failed.json()["feedback_category"], "wrong_output")
         self.assertEqual(failed.json()["progress"]["status"], "in_progress")
         self.assertEqual(failed.json()["progress"]["attempts"], 1)
+        self.assertEqual(self.client.get("/api/dashboard", headers=auth["headers"]).json()["streak"], 0)
 
         passed_code = "def filter_and_square(numbers, minimum):\n    return [value * value for value in numbers if value >= minimum]\n"
         passed = self.client.post(f"/api/practice/exercises/{slug}/run", headers=auth["headers"], json={"code": passed_code})
         self.assertEqual(passed.status_code, 200, passed.text)
         self.assertTrue(passed.json()["passed"], passed.text)
+        self.assertEqual(passed.json()["feedback_category"], "all_passed")
         self.assertEqual(passed.json()["progress"]["status"], "passed")
+        self.assertEqual(self.client.get("/api/dashboard", headers=auth["headers"]).json()["streak"], 1)
 
         again = self.client.post(f"/api/practice/exercises/{slug}/run", headers=auth["headers"], json={"code": failed_code})
         self.assertEqual(again.json()["progress"]["status"], "passed")
@@ -185,6 +190,7 @@ class ApiTests(unittest.TestCase):
         )
         self.assertEqual(invalid.status_code, 200, invalid.text)
         self.assertFalse(invalid.json()["ok"])
+        self.assertEqual(invalid.json()["feedback_category"], "validation_error")
         self.assertIn("Import", invalid.json()["error"])
 
         with patch("app.main.run_practice", side_effect=OSError("worker unavailable")):
@@ -462,6 +468,9 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(empty_body["streak"], 0)
         self.assertEqual(empty_body["lessons_completed"], 0)
         self.assertEqual(empty_body["completion"], 0)
+        self.assertEqual(empty_body["today_task"]["kind"], "lesson")
+        self.assertEqual(empty_body["today_task"]["reason_code"], "start_lesson")
+        self.assertEqual(empty_body["recent_activity"], [])
 
         courses = self.client.get("/api/courses").json()
         lessons = self.client.get(f"/api/courses/{courses[0]['id']}").json()["lessons"]

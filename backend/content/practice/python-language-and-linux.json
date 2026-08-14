@@ -17,6 +17,7 @@
         "returns": "int"
       },
       "starter_code": "def binary_search(values: list[int], target: int) -> int:\n    return -1\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `binary_search` 的参数和 algorithms, binary-search 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": [[1, 3, 5, 7, 9], 7],
@@ -55,6 +56,7 @@
         "returns": "list[list[int]]"
       },
       "starter_code": "def merge_ranges(ranges: list[list[int]]) -> list[list[int]]:\n    return []\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `merge_ranges` 的参数和 algorithms, sorting 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": [[[5, 8], [1, 3], [2, 6], [10, 12]]],
@@ -93,6 +95,7 @@
         "returns": "list[int]"
       },
       "starter_code": "def selector_specificity(selector: str) -> list[int]:\n    return [0, 0, 0]\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `selector_specificity` 的参数和 css, parsing 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": ["#app .card > h2.title"],
@@ -131,6 +134,7 @@
         "returns": "str"
       },
       "starter_code": "def permission_mode(permissions: str) -> str:\n    return \"\"\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `permission_mode` 的参数和 linux, permissions 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": ["rwxr-x---"],
