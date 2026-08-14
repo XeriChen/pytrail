@@ -48,6 +48,7 @@ const LANGUAGE_ALIASES: Record<string, NormalizedCodeLanguage> = {
   text: { language: 'plain', label: 'Text' },
   plaintext: { language: 'plain', label: 'Text' },
   plain: { language: 'plain', label: 'Text' },
+  mermaid: { language: 'plain', label: 'Mermaid' },
 }
 
 export function normalizeCodeLanguage(raw?: string): NormalizedCodeLanguage {

@@ -702,6 +702,18 @@ function CourseView({
                     theme={theme}
                     copyLabel={tx('code.copy')}
                     copiedLabel={tx('code.copied')}
+                    mermaidLabels={{
+                      diagram: tx('mermaid.diagram'),
+                      loading: tx('mermaid.loading'),
+                      failed: tx('mermaid.failed'),
+                      zoomIn: tx('mermaid.zoomIn'),
+                      zoomOut: tx('mermaid.zoomOut'),
+                      reset: tx('mermaid.reset'),
+                      fullscreen: tx('mermaid.fullscreen'),
+                      close: tx('mermaid.close'),
+                      copyCode: tx('code.copy'),
+                      copiedCode: tx('code.copied'),
+                    }}
                   />
                 </React.Suspense>
                 <CodeRunner key={lesson.id} initial={lesson.exercises[0]?.starter_code || 'print("Hello, Python!")'} />

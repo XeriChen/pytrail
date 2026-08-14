@@ -7,6 +7,7 @@ import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import type { Schema } from 'hast-util-sanitize'
 import type { Theme } from './theme'
 import { CodeBlock } from './code-block'
+import { MermaidDiagram, type MermaidLabels } from './mermaid-diagram'
 
 const allowedTags = [
   'a', 'b', 'blockquote', 'br', 'code', 'dd', 'del', 'details', 'dl', 'dt', 'em',
@@ -47,6 +48,20 @@ export interface CourseMarkdownProps {
   theme?: Theme
   copyLabel?: string
   copiedLabel?: string
+  mermaidLabels?: MermaidLabels
+}
+
+const defaultMermaidLabels: MermaidLabels = {
+  diagram: 'Mermaid diagram',
+  loading: 'Rendering diagram',
+  failed: 'Diagram could not be rendered. Source follows.',
+  zoomIn: 'Zoom in',
+  zoomOut: 'Zoom out',
+  reset: 'Reset zoom',
+  fullscreen: 'Full screen',
+  close: 'Close full screen',
+  copyCode: 'Copy code',
+  copiedCode: 'Copied',
 }
 
 export function CourseMarkdown({
@@ -57,6 +72,7 @@ export function CourseMarkdown({
   theme = 'dark',
   copyLabel = 'Copy code',
   copiedLabel = 'Copied',
+  mermaidLabels = defaultMermaidLabels,
 }: CourseMarkdownProps) {
   return (
     <div className="markdown">
@@ -71,6 +87,9 @@ export function CourseMarkdown({
             const className = children.props.className || ''
             const language = /(?:^|\s)language-([^\s]+)/.exec(className)?.[1]
             const code = String(children.props.children ?? '').replace(/\n$/, '')
+            if (language?.toLowerCase() === 'mermaid') {
+              return <MermaidDiagram source={code} theme={theme} labels={mermaidLabels} />
+            }
             return (
               <CodeBlock
                 code={code}

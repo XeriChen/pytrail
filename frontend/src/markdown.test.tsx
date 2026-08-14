@@ -3,6 +3,14 @@ import React from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { CourseMarkdown, resolveAssetUrl, isExternalUrl } from './markdown'
 
+vi.mock('./mermaid-diagram', async () => {
+  const ReactModule = await import('react')
+  return {
+    MermaidDiagram: ({ source }: { source: string }) =>
+      ReactModule.createElement('div', { className: 'mermaid-diagram' }, source),
+  }
+})
+
 function renderMarkdown(markdown: string): string {
   return render(
     <CourseMarkdown markdown={markdown} assetBaseUrl="/api/course-assets/python-foundations/" />,
@@ -15,6 +23,12 @@ describe('sanitized markdown renderer', () => {
     expect(html).toContain('<code>len(items)</code>')
     expect(html).toContain('class="code-block"')
     expect(html).toContain('token keyword')
+  })
+
+  it('dispatches Mermaid fences to the diagram renderer', () => {
+    const html = renderMarkdown('```mermaid\nflowchart LR\nA --> B\n```')
+    expect(html).toContain('class="mermaid-diagram"')
+    expect(html).not.toContain('data-language="plain"')
   })
 
   it('renders GFM tables and drops dangerous markup', () => {
