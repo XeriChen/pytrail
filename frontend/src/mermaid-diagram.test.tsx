@@ -53,7 +53,16 @@ describe('Mermaid diagrams', () => {
     view.rerender(<MermaidDiagram source="flowchart LR\nA --> B" theme="light" labels={labels} />)
     await waitFor(() => expect(mermaidMocks.render).toHaveBeenCalledTimes(2))
     expect(mermaidMocks.initialize).toHaveBeenLastCalledWith(expect.objectContaining({
-      themeVariables: expect.objectContaining({ primaryTextColor: '#211f1c' }),
+      themeVariables: expect.objectContaining({
+        background: '#e7eae4',
+        primaryColor: '#d5ddd6',
+        primaryTextColor: '#202622',
+        primaryBorderColor: '#52645b',
+        secondaryColor: '#d8e3dc',
+        tertiaryColor: '#e4ddca',
+        lineColor: '#58675f',
+        noteBkgColor: '#e8dfc9',
+      }),
     }))
   })
 

@@ -1,7 +1,7 @@
 import React from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CodeBlock, normalizeCodeLanguage } from './code-block'
+import { CodeBlock, MINERAL_LIGHT_CODE_THEME, normalizeCodeLanguage } from './code-block'
 
 const labels = { copyLabel: 'Copy code', copiedLabel: 'Copied' }
 
@@ -40,6 +40,15 @@ describe('reader code blocks', () => {
     expect(container.querySelector('.token.keyword')).toHaveTextContent('def')
     expect(container.querySelector('pre')).toHaveStyle({ whiteSpace: 'pre' })
     expect(screen.getByText('Python')).toBeInTheDocument()
+  })
+
+  it('uses the deep mineral palette for light-mode code', () => {
+    expect(MINERAL_LIGHT_CODE_THEME.plain).toEqual({
+      color: '#d8ded8',
+      backgroundColor: '#171c19',
+    })
+    const keyword = MINERAL_LIGHT_CODE_THEME.styles.find(({ types }) => types.includes('keyword'))
+    expect(keyword?.style.color).toBe('#82a985')
   })
 
   it('stays readable while a newly selected grammar loads', async () => {

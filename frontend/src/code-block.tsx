@@ -6,6 +6,22 @@ import type { Theme } from './theme'
 const ADDITIONAL_LANGUAGES = new Set(['bash', 'ini', 'java', 'powershell'])
 let additionalLanguagesPromise: Promise<void> | null = null
 
+export const MINERAL_LIGHT_CODE_THEME = {
+  plain: { color: '#d8ded8', backgroundColor: '#171c19' },
+  styles: [
+    { types: ['comment', 'prolog', 'doctype', 'cdata'], style: { color: '#7f8d84', fontStyle: 'italic' } },
+    { types: ['punctuation'], style: { color: '#aab5ad' } },
+    { types: ['keyword', 'boolean'], style: { color: '#82a985' } },
+    { types: ['property', 'tag', 'constant', 'symbol', 'deleted'], style: { color: '#d07a68' } },
+    { types: ['number'], style: { color: '#78a3a7' } },
+    { types: ['selector', 'attr-name', 'string', 'char', 'builtin', 'inserted'], style: { color: '#d39a7b' } },
+    { types: ['operator', 'entity', 'url', 'variable'], style: { color: '#c5b56a' } },
+    { types: ['atrule', 'attr-value', 'function'], style: { color: '#d1ad62' } },
+    { types: ['class-name'], style: { color: '#8e9fc7' } },
+    { types: ['regex', 'important'], style: { color: '#c88b64' } },
+  ],
+} satisfies typeof themes.oneDark
+
 function loadAdditionalLanguages(): Promise<void> {
   if (!additionalLanguagesPromise) {
     ;(globalThis as typeof globalThis & { Prism: typeof Prism }).Prism = Prism
@@ -141,7 +157,7 @@ export function CodeBlock({
     </pre>
   ) : (
     <Highlight
-      theme={theme === 'dark' ? themes.oneDark : themes.oneLight}
+      theme={theme === 'dark' ? themes.oneDark : MINERAL_LIGHT_CODE_THEME}
       code={code}
       language={normalized.language}
     >

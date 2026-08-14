@@ -45,17 +45,17 @@ function themeVariables(theme: Theme) {
         noteBorderColor: '#9d8b72',
       }
     : {
-        background: '#fbfaf7',
-        primaryColor: '#f1ece4',
-        primaryTextColor: '#211f1c',
-        primaryBorderColor: '#8c8175',
-        secondaryColor: '#e7f0eb',
-        tertiaryColor: '#f3eadc',
-        lineColor: '#655d55',
-        textColor: '#211f1c',
-        noteBkgColor: '#fff7e8',
-        noteTextColor: '#211f1c',
-        noteBorderColor: '#9a815d',
+        background: '#e7eae4',
+        primaryColor: '#d5ddd6',
+        primaryTextColor: '#202622',
+        primaryBorderColor: '#52645b',
+        secondaryColor: '#d8e3dc',
+        tertiaryColor: '#e4ddca',
+        lineColor: '#58675f',
+        textColor: '#202622',
+        noteBkgColor: '#e8dfc9',
+        noteTextColor: '#202622',
+        noteBorderColor: '#8a691c',
       }
 }
 
