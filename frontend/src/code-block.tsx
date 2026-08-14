@@ -1,11 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
 import { Check, Copy } from 'lucide-react'
 import { Highlight, Prism, themes } from 'prism-react-renderer'
-import loadLanguages from 'prismjs/components/index'
 import type { Theme } from './theme'
 
-;(globalThis as typeof globalThis & { Prism: typeof Prism }).Prism = Prism
-loadLanguages(['bash', 'ini', 'java', 'powershell'])
+const ADDITIONAL_LANGUAGES = new Set(['bash', 'ini', 'java', 'powershell'])
+let additionalLanguagesPromise: Promise<void> | null = null
+
+function loadAdditionalLanguages(): Promise<void> {
+  if (!additionalLanguagesPromise) {
+    ;(globalThis as typeof globalThis & { Prism: typeof Prism }).Prism = Prism
+    additionalLanguagesPromise = Promise.all([
+      import('prismjs/components/prism-bash'),
+      import('prismjs/components/prism-ini'),
+      import('prismjs/components/prism-java'),
+      import('prismjs/components/prism-powershell'),
+    ]).then(() => undefined)
+  }
+  return additionalLanguagesPromise
+}
 
 type CodeLanguage =
   | 'bash'
@@ -77,7 +89,31 @@ export function CodeBlock({
 }: CodeBlockProps) {
   const normalized = normalizeCodeLanguage(language)
   const [copied, setCopied] = useState(false)
+  const [languageReady, setLanguageReady] = useState(() => Boolean(Prism.languages[normalized.language]))
   const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    let active = true
+    if (normalized.language === 'plain' || Prism.languages[normalized.language]) {
+      setLanguageReady(true)
+      return
+    }
+    if (!ADDITIONAL_LANGUAGES.has(normalized.language)) {
+      setLanguageReady(false)
+      return
+    }
+    setLanguageReady(false)
+    void loadAdditionalLanguages()
+      .then(() => {
+        if (active) setLanguageReady(Boolean(Prism.languages[normalized.language]))
+      })
+      .catch(() => {
+        if (active) setLanguageReady(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [normalized.language])
 
   useEffect(() => () => {
     if (resetTimer.current) clearTimeout(resetTimer.current)
@@ -96,7 +132,10 @@ export function CodeBlock({
   }
 
   const actionLabel = copied ? copiedLabel : copyLabel
-  const source = normalized.language === 'plain' ? (
+  const canHighlight = normalized.language !== 'plain'
+    && languageReady
+    && Boolean(Prism.languages[normalized.language])
+  const source = !canHighlight ? (
     <pre className="code-block-source" style={{ whiteSpace: 'pre' }}>
       <code>{code}</code>
     </pre>

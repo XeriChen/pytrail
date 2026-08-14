@@ -99,7 +99,7 @@ async function mount() {
 }
 
 async function waitForMarkdown() {
-  await waitFor(() => expect(document.querySelector('.markdown')).toBeInTheDocument())
+  await waitFor(() => expect(document.querySelector('.markdown')).toBeInTheDocument(), { timeout: 5000 })
 }
 
 describe('on-demand course and lesson workflow', () => {

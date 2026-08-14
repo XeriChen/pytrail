@@ -42,16 +42,29 @@ describe('reader code blocks', () => {
     expect(screen.getByText('Python')).toBeInTheDocument()
   })
 
+  it('stays readable while a newly selected grammar loads', async () => {
+    const { container, rerender } = render(
+      <CodeBlock code="return True" language="python" theme="dark" {...labels} />,
+    )
+
+    expect(container.querySelector('.token.keyword')).toHaveTextContent('return')
+    expect(() => rerender(
+      <CodeBlock code="if test -f app.py; then echo ready; fi" language="bash" theme="dark" {...labels} />,
+    )).not.toThrow()
+    expect(container.querySelector('.code-block-source')).toHaveTextContent('if test -f app.py')
+    await waitFor(() => expect(container.querySelector('.prism-code')).toBeInTheDocument())
+  })
+
   it.each([
     ['bash', 'if test -f app.py; then echo ready; fi'],
     ['ini', '[server]\nport=8000'],
     ['java', 'public class App {}'],
     ['powershell', 'Get-ChildItem | Select-Object Name'],
-  ])('loads the additional %s grammar', (language, code) => {
+  ])('loads the additional %s grammar', async (language, code) => {
     const { container } = render(
       <CodeBlock code={code} language={language} theme="dark" {...labels} />,
     )
-    expect(container.querySelector('.prism-code')?.textContent).toBe(code)
+    await waitFor(() => expect(container.querySelector('.prism-code')?.textContent).toBe(code))
     expect(container.querySelector('.token')).toBeInTheDocument()
   })
 

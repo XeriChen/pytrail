@@ -69,12 +69,32 @@ export function useTheme(): { theme: Theme; toggleTheme: () => void } {
     }
 
     if (typeof query.addEventListener === 'function') {
-      query.addEventListener('change', onChange)
-      return () => query.removeEventListener('change', onChange)
+      try {
+        query.addEventListener('change', onChange)
+        return () => {
+          try {
+            query.removeEventListener('change', onChange)
+          } catch {
+            /* Ignore browser compatibility layer failures during cleanup. */
+          }
+        }
+      } catch {
+        /* Fall through to the legacy listener API. */
+      }
     }
 
-    query.addListener(onChange)
-    return () => query.removeListener(onChange)
+    try {
+      query.addListener(onChange)
+      return () => {
+        try {
+          query.removeListener(onChange)
+        } catch {
+          /* Ignore browser compatibility layer failures during cleanup. */
+        }
+      }
+    } catch {
+      return
+    }
   }, [])
 
   useEffect(() => {

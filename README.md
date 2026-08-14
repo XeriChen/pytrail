@@ -4,7 +4,7 @@ PyTrail is a modern, responsive Python learning platform built as a small full-s
 
 ## Stack
 
-- Web: React 19, TypeScript 7, Vite 8, React Markdown, Lucide icons
+- Web: React 19, TypeScript 7, Vite 8, React Markdown, Prism, Mermaid, Lucide icons
 - API: FastAPI, SQLAlchemy 2, Pydantic 2, JWT authentication, SQLite by default
 - Production database: set `DATABASE_URL` to a PostgreSQL connection string such as `postgresql+psycopg://user:password@host/db`
 - Course content: 9 courses / 102 lessons synced from a Markdown content tree into SQLite at startup
@@ -28,8 +28,9 @@ PyTrail is a modern, responsive Python learning platform built as a small full-s
 │   └── uv.lock          # reproducible dependency lockfile
 ├── frontend/
 │   ├── src/main.tsx       # app shell, views, auth and API client
-│   ├── src/markdown.tsx   # sanitized markdown rendering + asset links
-│   ├── src/styles.css     # responsive dark UI
+│   ├── src/markdown.tsx   # sanitized markdown, highlighted code, diagrams
+│   ├── src/theme.ts       # system-aware persisted light/dark theme
+│   ├── src/styles.css     # responsive light and dark UI
 │   └── package.json
 ├── docker-compose.yml
 └── .github/workflows/ci.yml
@@ -58,6 +59,10 @@ npm run dev
 ```
 
 Open `http://localhost:5173`. The API Swagger docs are available at `http://localhost:8000/docs`.
+
+The reader follows the operating-system light/dark preference until a theme is selected from the sidebar, then saves that explicit choice locally. Fenced code blocks are highlighted with language labels and copy controls. Python, Shell/Bash, SQL/Hive, HTML/XML, JSON, JavaScript, INI, Java, PowerShell, Dockerfile, and Nginx aliases are recognized; unknown languages remain readable plain text.
+
+Fenced `mermaid` blocks render client-side with theme-aware colors, bounded zoom, reset, and full-screen controls. Mermaid is loaded only when a diagram is present and uses `securityLevel: "strict"`; invalid diagrams fall back to their original source.
 
 For LAN access, open `http://<host-ip>:5173`. Vite proxies same-origin `/api` requests to FastAPI. On Windows, run `scripts/configure-windows-lan.ps1` as Administrator once to mark the active network as private and allow TCP ports 5173 and 8000 from the local subnet.
 

@@ -86,4 +86,22 @@ describe('theme preference', () => {
     const { result } = renderHook(() => useTheme())
     expect(result.current.theme).toBe('light')
   })
+
+  it('falls back to the legacy media listener when the modern API throws', () => {
+    let listener: ChangeListener | undefined
+    vi.stubGlobal('matchMedia', vi.fn(() => ({
+      matches: true,
+      media: '(prefers-color-scheme: dark)',
+      onchange: null,
+      addEventListener: () => { throw new Error('unsupported') },
+      removeEventListener: vi.fn(),
+      addListener: (next: ChangeListener) => { listener = next },
+      removeListener: vi.fn(),
+      dispatchEvent: () => true,
+    } as MediaQueryList)))
+
+    const { result } = renderHook(() => useTheme())
+    act(() => listener?.({ matches: false } as MediaQueryListEvent))
+    expect(result.current.theme).toBe('light')
+  })
 })

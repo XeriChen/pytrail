@@ -214,8 +214,12 @@ export function MermaidDiagram({ source, theme, labels }: MermaidDiagramProps) {
       )}
       {state === 'success' && (
         <>
-          {toolbar()}
-          {!fullscreen && diagram()}
+          {!fullscreen && (
+            <>
+              {toolbar()}
+              {diagram()}
+            </>
+          )}
           {fullscreen && typeof document !== 'undefined' && createPortal(
             <div
               className="mermaid-overlay"

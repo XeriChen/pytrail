@@ -104,9 +104,10 @@ describe('Mermaid diagrams', () => {
     fireEvent.click(trigger)
     expect(screen.getByRole('dialog', { name: labels.fullscreen })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: labels.close })).toHaveFocus()
+    expect(screen.getAllByRole('button', { name: labels.zoomIn })).toHaveLength(1)
 
     fireEvent.keyDown(document, { key: 'Escape' })
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(trigger).toHaveFocus()
+    expect(screen.getByRole('button', { name: labels.fullscreen })).toHaveFocus()
   })
 })
