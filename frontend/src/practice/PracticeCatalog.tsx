@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   CheckCircle2,
   ChevronLeft,
@@ -18,8 +18,10 @@ const EMPTY: PracticeCatalogData = {
   facets: { courses: [], lessons: [], difficulties: [], tags: [] },
 }
 
-export function PracticeCatalog({ locale, authenticated }: { locale: Locale; authenticated: boolean }) {
+export function PracticeCatalog({ locale, authenticated, userId }: { locale: Locale; authenticated: boolean; userId: number | null }) {
   const zh = locale === 'zh'
+  const zhRef = useRef(zh)
+  zhRef.current = zh
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const [data, setData] = useState(EMPTY)
@@ -56,11 +58,13 @@ export function PracticeCatalog({ locale, authenticated }: { locale: Locale; aut
     const controller = new AbortController()
     setState('loading')
     const query = params.toString()
-    apiRequest<PracticeCatalogData>(`/practice/exercises${query ? `?${query}` : ''}`, {}, zh ? '题库加载失败' : 'Failed to load exercises', controller.signal)
+    apiRequest<PracticeCatalogData>(`/practice/exercises${query ? `?${query}` : ''}`, {}, zhRef.current ? '题库加载失败' : 'Failed to load exercises', controller.signal)
       .then((value) => { setData(value); setState('success') })
       .catch((error) => { if (error.name !== 'AbortError') setState('error') })
     return () => controller.abort()
-  }, [params, requestKey, zh])
+    // Locale only affects display copy: refetch on filters, retry, or auth identity
+    // changes, never on a plain language switch.
+  }, [params, requestKey, userId])
 
   const update = (key: string, value: string) => {
     const next = new URLSearchParams(params)

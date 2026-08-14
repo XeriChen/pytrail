@@ -88,6 +88,7 @@ Compose 适合本地联调。生产环境必须设置强随机 `SECRET_KEY`、`P
 | `COURSE_CONTENT_ROOT` | `backend/content/python-100-days` | 课程内容根目录，建议使用绝对路径覆盖 |
 | `SECRET_KEY` | `dev-only-change-me` | JWT 密钥；生产环境禁止使用默认值 |
 | `PYTRAIL_ENV` | `development` | `production`/`prod` 会启用密钥强校验 |
+| `PYTRAIL_ENABLE_LEGACY_EXECUTE` | 关闭 | 设为 `1` 且非生产环境时启用旧课内演练 `/api/execute`；该入口不是沙箱 |
 | `CORS_ORIGINS` | `http://localhost:5173` | 逗号分隔的允许来源 |
 | `VITE_API_URL` | `/api` | 前端请求 API 的基础路径 |
 | `VITE_API_PROXY_TARGET` | `http://127.0.0.1:8000` | Vite 开发代理目标 |
@@ -124,7 +125,7 @@ CI 使用相同的测试与构建入口。完整的验证矩阵和排障方法�
 
 练习场运行器只面向受控的函数题，执行前要求登录，并限制为每个用户/IP 每分钟 20 次。提交源码最大 12 KB，总执行超时 2 秒。导入、文件、网络、子进程、动态求值和私有属性遍历会被拒绝。
 
-RestrictedPython 子进程不是面向敌对公网流量的完整强隔离沙箱。对外开放时，应把代码执行迁移到独立的临时容器或专用沙箱服务。旧的 `/api/execute` 仅供课内本地演示，不属于练习场运行链路。
+RestrictedPython 子进程不是面向敌对公网流量的完整强隔离沙箱。对外开放时，应把代码执行迁移到独立的临时容器或专用沙箱服务。旧的 `/api/execute` 演练入口默认关闭，仅在本地开发环境通过 `PYTRAIL_ENABLE_LEGACY_EXECUTE=1` 显式开启，生产环境一律返回 404。
 
 ## 维护文档
 

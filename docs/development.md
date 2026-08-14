@@ -46,6 +46,7 @@ http://localhost:8000/docs
 | `COURSE_CONTENT_ROOT` | `backend/app/course_sync.py` | 仓库内课程目录 | 覆盖时使用包含 9 个课程 slug 子目录的根目录 |
 | `SECRET_KEY` | `backend/app/auth.py` | 开发默认值 | 生产必须使用长随机值 |
 | `PYTRAIL_ENV` / `ENV` | `backend/app/auth.py` | `development` | `production` 或 `prod` 禁止默认密钥 |
+| `PYTRAIL_ENABLE_LEGACY_EXECUTE` | `backend/app/main.py` | 关闭 | 设为 `1` 且非生产环境时启用旧课内演练 `/api/execute`；隔离强度低，不要向公网开放 |
 | `CORS_ORIGINS` | `backend/app/main.py` | `http://localhost:5173` | 逗号分隔；生产不要使用宽泛来源 |
 | `VITE_API_URL` | `frontend/src/api.ts` | `/api` | 构建期变量 |
 | `VITE_API_PROXY_TARGET` | `frontend/vite.config.ts` | `http://127.0.0.1:8000` | 仅 Vite 开发代理 |

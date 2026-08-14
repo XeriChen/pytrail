@@ -12,6 +12,7 @@ from .database import get_db
 from .models import User
 
 DEFAULT_SECRET_KEY = "dev-only-change-me"
+MIN_SECRET_KEY_LENGTH = 16
 KNOWN_INSECURE_SECRETS = frozenset(
     {
         DEFAULT_SECRET_KEY,
@@ -26,7 +27,12 @@ bearer = HTTPBearer(auto_error=False)
 
 
 def is_insecure_secret(secret: str | None) -> bool:
-    return not secret or not secret.strip() or secret.strip() in KNOWN_INSECURE_SECRETS
+    return (
+        not secret
+        or not secret.strip()
+        or len(secret.strip()) < MIN_SECRET_KEY_LENGTH
+        or secret.strip() in KNOWN_INSECURE_SECRETS
+    )
 
 
 def resolve_environment(environment: str | None = None) -> str:

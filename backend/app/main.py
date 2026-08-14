@@ -10,13 +10,15 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, load_only, selectinload
-from .auth import create_token, current_user, enforce_secret_key_policy, hash_password, optional_current_user, verify_password
+from .auth import create_token, current_user, enforce_secret_key_policy, hash_password, is_production_environment, optional_current_user, verify_password
 from .database import Base, SessionLocal, engine, get_db
 from .metrics import as_utc_date, compute_streak
 from .models import Course, Exercise, Lesson, Progress, User
 from .practice_runner import MAX_SOURCE_BYTES, PracticeCaseInput, PracticeRunError, PracticeRunnerUnavailable, run_practice
 from .practice_service import DIFFICULTIES, STATUSES, exercise_detail, get_exercise, list_exercises, record_run
+from .progress_service import upsert_lesson_progress
 from .ratelimit import auth_limiter, practice_limiter
 from .course_sync import ContentSyncError, resolve_content_root, sync_courses
 from .schemas import CourseDetailOut, CourseSummaryOut, ExecuteIn, ExerciseOut, ExerciseSubmit, LessonDetailOut, LessonSummaryOut, LoginRequest, PracticeCatalogOut, PracticeDetailOut, PracticeProgressOut, PracticeRunIn, PracticeRunOut, ProgressIn, Token, UserCreate, UserOut
@@ -30,9 +32,11 @@ async def lifespan(_app: FastAPI):
     try:
         result = sync_courses(db, resolve_content_root())
         _app.state.content_index = result.index
-        yield
     finally:
+        # Release the connection before serving requests: an idle-in-transaction
+        # session would otherwise pin a PostgreSQL connection for the app lifetime.
         db.close()
+    yield
 
 
 app = FastAPI(title="PyTrail Learning API", version="1.0.0", lifespan=lifespan)
@@ -50,6 +54,17 @@ def limit_auth(request: Request) -> None:
         raise HTTPException(status_code=429, detail="Too many attempts. Try again later.")
 
 
+def legacy_execute_enabled() -> bool:
+    """The legacy in-lesson playground runs unisolated `python -I -c`.
+
+    It is opt-in via `PYTRAIL_ENABLE_LEGACY_EXECUTE` and is never available in
+    production. Public deployments must use a dedicated sandbox for arbitrary
+    code execution instead of this endpoint.
+    """
+    flag = os.getenv("PYTRAIL_ENABLE_LEGACY_EXECUTE", "").strip().lower()
+    return flag in {"1", "true", "yes", "on"} and not is_production_environment()
+
+
 @app.get("/api/health")
 def health():
     return {"status": "ok", "service": "pytrail-api"}
@@ -58,13 +73,16 @@ def health():
 @app.post("/api/auth/register", response_model=Token, status_code=201)
 def register(payload: UserCreate, request: Request, db: Session = Depends(get_db)):
     limit_auth(request)
-    if len(payload.password) < 8:
-        raise HTTPException(400, "Password must be at least 8 characters")
-    if db.scalar(select(User).where(User.email == payload.email.lower())):
+    email = payload.email
+    if db.scalar(select(User).where(User.email == email)):
         raise HTTPException(409, "Email already registered")
-    user = User(name=payload.name.strip(), email=payload.email.lower(), password_hash=hash_password(payload.password))
+    user = User(name=payload.name.strip(), email=email, password_hash=hash_password(payload.password))
     db.add(user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "Email already registered") from None
     db.refresh(user)
     return Token(access_token=create_token(user.id), user=user)
 
@@ -257,13 +275,15 @@ def dashboard(user: User = Depends(current_user), db: Session = Depends(get_db))
 
 @app.post("/api/progress")
 def update_progress(payload: ProgressIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    progress = db.scalar(select(Progress).where(Progress.user_id == user.id, Progress.lesson_id == payload.lesson_id))
-    if not progress:
-        progress = Progress(user_id=user.id, lesson_id=payload.lesson_id)
-        db.add(progress)
-    progress.completed = payload.completed
-    progress.score = max(0, min(payload.score, 100))
-    db.commit()
+    if db.get(Lesson, payload.lesson_id) is None:
+        raise HTTPException(404, "Lesson not found")
+    progress = upsert_lesson_progress(
+        db,
+        user_id=user.id,
+        lesson_id=payload.lesson_id,
+        completed=payload.completed,
+        score=max(0, min(payload.score, 100)),
+    )
     return {"ok": True, "lesson_id": payload.lesson_id, "completed": progress.completed}
 
 
@@ -275,19 +295,23 @@ def submit_exercise(exercise_id: int, payload: ExerciseSubmit, user: User = Depe
     if exercise.kind != "quick_check":
         raise HTTPException(404, "Exercise not found")
     correct = payload.answer.strip().lower() == exercise.expected_answer.lower()
-    progress = db.scalar(select(Progress).where(Progress.user_id == user.id, Progress.lesson_id == exercise.lesson_id))
-    if not progress:
-        progress = Progress(user_id=user.id, lesson_id=exercise.lesson_id)
-        db.add(progress)
-    progress.score = 100 if correct else 40
-    progress.completed = correct
-    db.commit()
+    score = 100 if correct else 40
+    progress = upsert_lesson_progress(
+        db,
+        user_id=user.id,
+        lesson_id=exercise.lesson_id,
+        completed=correct,
+        score=score,
+    )
     return {"correct": correct, "score": progress.score, "message": "Nice work!" if correct else "Almost there - review the lesson and try again."}
 
 
 @app.post("/api/execute")
-def execute(payload: ExecuteIn, user: User = Depends(current_user)):
-    del user  # auth is required for attribution; the runner does not use the user record
+def execute(payload: ExecuteIn, user: User | None = Depends(optional_current_user)):
+    if not legacy_execute_enabled():
+        raise HTTPException(404, "Not found")
+    if user is None:
+        raise HTTPException(401, "Authentication required")
     if len(payload.code) > 4000:
         raise HTTPException(413, "Code is too long")
     try:

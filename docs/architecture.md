@@ -42,6 +42,7 @@ flowchart LR
 - `backend/app/course_sync.py`：课程发现、内容摘要、内部链接索引和事务同步。
 - `backend/app/practice_manifest.py`：练习清单解析与完整性校验。
 - `backend/app/practice_service.py`：题库筛选、详情序列化和原子进度 upsert。
+- `backend/app/progress_service.py`：课时进度的方言原子 upsert（SQLite / PostgreSQL）。
 - `backend/app/practice_runner.py`：主进程校验、子进程调度、超时和协议边界。
 - `backend/app/practice_worker.py`：RestrictedPython 执行与案例比较。
 - `backend/app/models.py`：SQLAlchemy 数据模型。
@@ -106,6 +107,12 @@ erDiagram
 
 注册和登录返回 7 天有效的 HS256 JWT。前端保存在 `localStorage.pytrail_token`，统一 API 客户端通过 Bearer header 发送。公开练习接口使用可选认证，因此登录用户能在相同响应中获得自己的进度。
 
+注册与登录的邮箱会先 trim 再做小写归一化；姓名 trim 后不能为空；姓名、邮箱和密码都有长度上限，密码不 trim。并发重复注册依赖唯一约束返回 409，不产生 500。生产环境的 `SECRET_KEY` 必须是非已知默认值且长度至少 16 字符。
+
+### 课时进度写入
+
+`/api/progress` 与速测提交先校验课时存在，再通过 `progress_service.upsert_lesson_progress` 执行方言特定的 `INSERT ... ON CONFLICT DO UPDATE`，并发首次写入不会触发唯一约束错误。SQLite 连接统一启用 `PRAGMA foreign_keys=ON`，孤儿进度行会被数据库拒绝。
+
 ## 代码执行边界
 
 练习代码不在 API 进程中直接执行。主进程先进行 AST 和函数签名校验，再以 `python -I` 启动子进程，通过有大小限制的 UTF-8 JSON stdin/stdout 通信。
@@ -128,4 +135,4 @@ erDiagram
 - 内容同步采用全量重建，适合当前无生产历史数据阶段。
 - 题库规模固定且较小，后端在内存中完成 36 道题的搜索、筛选和分页。
 - 所有案例均为公开案例，没有隐藏测试、排行榜、提交历史或多语言运行器。
-- `/api/execute` 是旧课程演示入口，隔离强度低于练习运行器，不应对不可信公网用户开放。
+- `/api/execute` 是旧课程演示入口，默认关闭：只有显式设置 `PYTRAIL_ENABLE_LEGACY_EXECUTE=1` 且环境不是生产时才存在，其余情况返回 404。它用 `python -I -c` 直接执行，隔离强度低于练习运行器，启用仅限本地开发演示，不应对不可信公网用户开放。

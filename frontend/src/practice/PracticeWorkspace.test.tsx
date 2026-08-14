@@ -37,8 +37,8 @@ describe('practice workspace', () => {
     vi.restoreAllMocks()
   })
 
-  function mount(authenticated: boolean, onAuth = vi.fn()) {
-    return render(<MemoryRouter initialEntries={['/practice/filter-and-square']}><Routes><Route path="/practice/:slug" element={<PracticeWorkspace locale="zh" theme="dark" authenticated={authenticated} onAuth={onAuth} onOpenLesson={() => {}} />} /></Routes></MemoryRouter>)
+  function mount(authenticated: boolean, onAuth = vi.fn(), userId: number | null = authenticated ? 1 : null) {
+    return render(<MemoryRouter initialEntries={['/practice/filter-and-square']}><Routes><Route path="/practice/:slug" element={<PracticeWorkspace locale="zh" theme="dark" authenticated={authenticated} userId={userId} onAuth={onAuth} onOpenLesson={() => {}} />} /></Routes></MemoryRouter>)
   }
 
   it('keeps edited code when an anonymous run opens authentication', async () => {
@@ -113,7 +113,7 @@ describe('practice workspace', () => {
     render(
       <MemoryRouter initialEntries={['/practice/filter-and-square']}>
         <Link to="/practice/another-problem">下一题</Link>
-        <Routes><Route path="/practice/:slug" element={<PracticeWorkspace locale="zh" theme="dark" authenticated onAuth={() => {}} onOpenLesson={() => {}} />} /></Routes>
+        <Routes><Route path="/practice/:slug" element={<PracticeWorkspace locale="zh" theme="dark" authenticated userId={1} onAuth={() => {}} onOpenLesson={() => {}} />} /></Routes>
       </MemoryRouter>,
     )
     await screen.findByRole('textbox', { name: 'Python 代码' })
@@ -122,5 +122,30 @@ describe('practice workspace', () => {
     expect(await screen.findByRole('heading', { name: '另一道题' })).toBeInTheDocument()
     await act(async () => resolveRun?.(new Response(JSON.stringify(PASSED), { status: 200, headers: { 'Content-Type': 'application/json' } })))
     expect(screen.queryByText('全部通过')).not.toBeInTheDocument()
+  })
+
+  it('keeps unsaved code when only the display language switches', async () => {
+    const { rerender } = mount(true)
+    const editor = await screen.findByRole('textbox', { name: 'Python 代码' })
+    const editedCode = 'def filter_and_square(numbers, minimum):\n    return [4]'
+    fireEvent.change(editor, { target: { value: editedCode } })
+    const detailCalls = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/practice/exercises/filter-and-square')).length
+    rerender(<MemoryRouter initialEntries={['/practice/filter-and-square']}><Routes><Route path="/practice/:slug" element={<PracticeWorkspace locale="en" theme="dark" authenticated userId={1} onAuth={() => {}} onOpenLesson={() => {}} />} /></Routes></MemoryRouter>)
+    expect(screen.getByRole('textbox', { name: 'Python code' })).toHaveValue(editedCode)
+    expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/practice/exercises/filter-and-square')).length).toBe(detailCalls)
+  })
+
+  it('refetches detail and resets code when the signed-in account changes', async () => {
+    const { rerender } = mount(true, vi.fn(), 1)
+    const editor = await screen.findByRole('textbox', { name: 'Python 代码' })
+    fireEvent.change(editor, { target: { value: 'def filter_and_square(numbers, minimum):\n    return [4]' } })
+    const detailCalls = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/practice/exercises/filter-and-square')).length
+    vi.mocked(fetch).mockImplementation(() => Promise.resolve(new Response(JSON.stringify({
+      ...DETAIL,
+      progress: { status: 'in_progress', attempts: 1, last_code: 'def filter_and_square(numbers, minimum):\n    return [9]\n', updated_at: '2026-08-14T00:00:00Z' },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    rerender(<MemoryRouter initialEntries={['/practice/filter-and-square']}><Routes><Route path="/practice/:slug" element={<PracticeWorkspace locale="zh" theme="dark" authenticated userId={2} onAuth={() => {}} onOpenLesson={() => {}} />} /></Routes></MemoryRouter>)
+    expect(await screen.findByRole('textbox', { name: 'Python 代码' })).toHaveValue('def filter_and_square(numbers, minimum):\n    return [9]\n')
+    expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/practice/exercises/filter-and-square')).length).toBeGreaterThan(detailCalls)
   })
 })

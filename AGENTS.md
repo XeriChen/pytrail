@@ -18,6 +18,7 @@
 | 课程注册、顺序、内容同步 | `backend/app/course_sync.py` |
 | 练习清单格式与校验 | `backend/app/practice_manifest.py` |
 | 练习运行限制 | `backend/app/practice_runner.py`、`backend/app/practice_worker.py` |
+| 课时进度原子写入 | `backend/app/progress_service.py` |
 | 数据模型 | `backend/app/models.py` |
 | API 合约 | `backend/app/main.py`、`backend/app/schemas.py` |
 | 前端路由与应用状态 | `frontend/src/main.tsx`、`frontend/src/practice/` |
@@ -61,7 +62,7 @@
 - 内容解析和清单校验必须在数据库写入前完成；同步失败必须保留上一个完整目录。
 - 公开列表和详情不能泄露速测答案、服务端秘密或未公开运行器信息。
 - 练习执行必须保持鉴权、速率限制、源码限制、总超时和独立子进程边界。
-- 不要把 `/api/execute` 用作练习场运行器。它只是旧课内演示接口。
+- 不要把 `/api/execute` 用作练习场运行器。它是旧课内演示接口，默认返回 404；只有设置 `PYTRAIL_ENABLE_LEGACY_EXECUTE=1` 且非生产环境时才启用，隔离强度低，仅限本地演示。
 - 数据库写入需要显式事务语义。练习进度的并发更新必须保持原子 upsert 和通过状态不降级。
 - 新增数据库方言时，要同步实现和验证 `record_run` 的 upsert 逻辑；当前只支持 SQLite 和 PostgreSQL。
 

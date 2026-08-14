@@ -14,16 +14,20 @@ export function PracticeWorkspace({
   locale,
   theme,
   authenticated,
+  userId,
   onAuth,
   onOpenLesson,
 }: {
   locale: Locale
   theme: Theme
   authenticated: boolean
+  userId: number | null
   onAuth: () => void
   onOpenLesson: (lessonId: number) => void
 }) {
   const zh = locale === 'zh'
+  const zhRef = useRef(zh)
+  zhRef.current = zh
   const { slug = '' } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
@@ -47,14 +51,16 @@ export function PracticeWorkspace({
     setState('loading')
     setDetail(null)
     setResult(null)
-    apiRequest<PracticeDetail>(`/practice/exercises/${slug}`, {}, zh ? '题目加载失败' : 'Failed to load problem', controller.signal)
+    apiRequest<PracticeDetail>(`/practice/exercises/${slug}`, {}, zhRef.current ? '题目加载失败' : 'Failed to load problem', controller.signal)
       .then((value) => { setDetail(value); setCode(value.progress?.last_code || value.starter_code); setState('success') })
       .catch((error) => { if (error.name !== 'AbortError') setState('error') })
     return () => {
       controller.abort()
       runRequestId.current += 1
     }
-  }, [slug, requestKey, zh])
+    // Locale only affects display copy: reload on slug, retry, or auth identity
+    // changes. A plain language switch must not refetch and overwrite unsaved code.
+  }, [slug, requestKey, userId])
 
   useEffect(() => {
     if (!editorFullscreen) {
