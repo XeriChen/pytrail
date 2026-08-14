@@ -1,9 +1,12 @@
+import { isValidElement } from 'react'
+import type { ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import type { Schema } from 'hast-util-sanitize'
 import type { Theme } from './theme'
+import { CodeBlock } from './code-block'
 
 const allowedTags = [
   'a', 'b', 'blockquote', 'br', 'code', 'dd', 'del', 'details', 'dl', 'dt', 'em',
@@ -42,6 +45,8 @@ export interface CourseMarkdownProps {
   lessonLinks?: Record<string, number>
   onLessonLink?: (targetId: number) => void
   theme?: Theme
+  copyLabel?: string
+  copiedLabel?: string
 }
 
 export function CourseMarkdown({
@@ -49,6 +54,9 @@ export function CourseMarkdown({
   assetBaseUrl,
   lessonLinks = {},
   onLessonLink,
+  theme = 'dark',
+  copyLabel = 'Copy code',
+  copiedLabel = 'Copied',
 }: CourseMarkdownProps) {
   return (
     <div className="markdown">
@@ -56,6 +64,23 @@ export function CourseMarkdown({
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeRaw, [rehypeSanitize, schema]]}
         components={{
+          pre: ({ children }) => {
+            if (!isValidElement<{ className?: string; children?: ReactNode }>(children) || children.type !== 'code') {
+              return <pre>{children}</pre>
+            }
+            const className = children.props.className || ''
+            const language = /(?:^|\s)language-([^\s]+)/.exec(className)?.[1]
+            const code = String(children.props.children ?? '').replace(/\n$/, '')
+            return (
+              <CodeBlock
+                code={code}
+                language={language}
+                theme={theme}
+                copyLabel={copyLabel}
+                copiedLabel={copiedLabel}
+              />
+            )
+          },
           table: ({ children }) => (
             <div className="markdown-table-wrap">
               <table>{children}</table>

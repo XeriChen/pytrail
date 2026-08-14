@@ -694,7 +694,15 @@ function CourseView({
                 <div className="lesson-kicker">{tx('course.lessonMeta', { n: lesson.order, duration: lesson.duration })}</div>
                 <h2>{lesson.title}</h2>
                 <React.Suspense fallback={<StatePanel kind="loading" />}>
-                  <CourseMarkdown markdown={lesson.markdown} assetBaseUrl={lesson.asset_base_url} lessonLinks={lesson.lesson_links} onLessonLink={onLessonLink} theme={theme} />
+                  <CourseMarkdown
+                    markdown={lesson.markdown}
+                    assetBaseUrl={lesson.asset_base_url}
+                    lessonLinks={lesson.lesson_links}
+                    onLessonLink={onLessonLink}
+                    theme={theme}
+                    copyLabel={tx('code.copy')}
+                    copiedLabel={tx('code.copied')}
+                  />
                 </React.Suspense>
                 <CodeRunner key={lesson.id} initial={lesson.exercises[0]?.starter_code || 'print("Hello, Python!")'} />
                 {lesson.exercises.length > 0 ? (

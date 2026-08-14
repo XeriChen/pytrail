@@ -10,6 +10,13 @@ function renderMarkdown(markdown: string): string {
 }
 
 describe('sanitized markdown renderer', () => {
+  it('keeps inline code inline and dispatches fenced code to the reader block', () => {
+    const html = renderMarkdown('Use `len(items)` here.\n\n```python\ndef size(items):\n    return len(items)\n```')
+    expect(html).toContain('<code>len(items)</code>')
+    expect(html).toContain('class="code-block"')
+    expect(html).toContain('token keyword')
+  })
+
   it('renders GFM tables and drops dangerous markup', () => {
     const html = renderMarkdown(
       '| a | b |\n| - | - |\n| 1 | 2 |\n\n<img src="res/a.png" onerror="alert(1)" style="color:red">\n<script>alert(1)</script>',
