@@ -26,8 +26,8 @@ const SUMMARIES: CourseSummary[] = [
 ]
 
 const FOUNDATIONS_LESSONS = [
-  { id: 101, title: '初识Python', order: 1, duration: 12, has_exercises: true },
-  { id: 102, title: '第一个Python程序', order: 2, duration: 10, has_exercises: true },
+  { id: 101, title: '初识Python', order: 1, duration: 12, has_exercises: true, practice_count: 1 },
+  { id: 102, title: '第一个Python程序', order: 2, duration: 10, has_exercises: true, practice_count: 0 },
 ]
 
 const FOUNDATIONS_DETAIL = { ...SUMMARIES[0], lessons: FOUNDATIONS_LESSONS }
@@ -40,6 +40,7 @@ const LESSON_DETAIL = {
   order: 1,
   duration: 12,
   has_exercises: true,
+  practice_count: 1,
   markdown: '## 初识Python\n\n欢迎学习 Python。',
   exercises: [{ id: 1, prompt: 'Which command prints the interpreter version?', starter_code: 'print("ready")' }],
   asset_base_url: '/api/course-assets/python-foundations/',
@@ -83,6 +84,7 @@ function baseRespond(input: RequestInfo | URL): Promise<Response> {
         headers: { 'Content-Type': 'application/json' },
       }),
     )
+  if (url.includes('/api/practice/exercises')) return respond({ items: [], total: 0, page: 1, page_size: 12, facets: { courses: [], lessons: [], difficulties: [], tags: [] } })
   if (url.includes('/api/courses/1')) return respond(FOUNDATIONS_DETAIL)
   if (url.includes('/api/courses/2')) return respond(FOUNDATIONS_COURSE_2)
   if (url.includes('/api/courses')) return respond(SUMMARIES)
@@ -105,6 +107,7 @@ async function waitForMarkdown() {
 describe('on-demand course and lesson workflow', () => {
   beforeEach(() => {
     localStorage.clear()
+    window.history.replaceState(null, '', '/')
     vi.stubGlobal('matchMedia', vi.fn(() => ({
       matches: true,
       media: '(prefers-color-scheme: dark)',
@@ -171,6 +174,17 @@ describe('on-demand course and lesson workflow', () => {
     fireEvent.click(screen.getByTestId('nav-course'))
     await waitFor(() => expect(screen.getAllByRole('heading', { name: '初识Python' }).length).toBeGreaterThan(0))
     await waitForMarkdown()
+  })
+
+  it('opens the independent practice catalog without preloading a course detail', async () => {
+    const fetchMock = vi.mocked(fetch)
+    await mount()
+    await waitFor(() => expect(screen.getAllByTestId('course-card')).toHaveLength(9))
+    fetchMock.mockClear()
+    fireEvent.click(screen.getByTestId('nav-practice'))
+    expect(await screen.findByRole('heading', { name: '九门课程精选题' })).toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/practice/exercises'))).toBe(true)
+    expect(fetchMock.mock.calls.some(([url]) => /\/api\/courses\/\d+|\/api\/lessons\//.test(String(url)))).toBe(false)
   })
 
   it('resets exercise input when navigating to another lesson', async () => {

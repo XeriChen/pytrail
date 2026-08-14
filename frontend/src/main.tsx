@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
+import { BrowserRouter, useLocation, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft,
   ArrowRight,
@@ -37,16 +38,18 @@ import {
 } from './i18n'
 import { Particle, Vec, cardTilt, createParticles, particleColor, stepScene } from './motion'
 import { Theme, useTheme } from './theme'
+import { apiRequest as request } from './api'
+import { PracticeRoutes } from './practice/PracticeRoutes'
 import './styles.css'
+import './practice/practice.css'
 
 const CourseMarkdown = React.lazy(() =>
   import('./markdown').then((module) => ({ default: module.CourseMarkdown })),
 )
 
-const API = import.meta.env.VITE_API_URL || '/api'
 type Exercise = { id: number; prompt: string; starter_code: string }
 type CourseSummary = { id: number; slug: string; title: string; description: string; level: string; accent: string; lesson_count: number; total_duration: number }
-type LessonSummary = { id: number; title: string; order: number; duration: number; has_exercises: boolean }
+type LessonSummary = { id: number; title: string; order: number; duration: number; has_exercises: boolean; practice_count?: number }
 type CourseDetail = CourseSummary & { lessons: LessonSummary[] }
 type LessonDetail = LessonSummary & { course_id: number; course_slug: string; markdown: string; exercises: Exercise[]; asset_base_url: string; lesson_links: Record<string, number> }
 type User = { id: number; name: string; email: string }
@@ -66,29 +69,6 @@ function useI18n(): I18n {
   const ctx = useContext(I18nContext)
   if (!ctx) throw new Error('i18n missing')
   return ctx
-}
-
-async function request<T>(path: string, options: RequestInit = {}, failed: string): Promise<T> {
-  const token = localStorage.getItem('pytrail_token')
-  const response = await fetch(`${API}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(options.headers || {}),
-    },
-  })
-  if (!response.ok) {
-    let detail = failed
-    try {
-      const body = await response.json()
-      detail = body.detail || failed
-    } catch {
-      /* ignore */
-    }
-    throw new Error(detail)
-  }
-  return response.json()
 }
 
 function TrailCanvas({ pointer, theme }: { pointer: Vec; theme: Theme }) {
@@ -155,7 +135,13 @@ function TrailCanvas({ pointer, theme }: { pointer: Vec; theme: Theme }) {
 }
 
 export function App() {
+  return <BrowserRouter><AppShell /></BrowserRouter>
+}
+
+function AppShell() {
   const { theme, toggleTheme } = useTheme()
+  const location = useLocation()
+  const navigate = useNavigate()
   const [locale, setLocaleState] = useState<Locale>(() => readLocale(typeof localStorage === 'undefined' ? null : localStorage))
   const [user, setUser] = useState<User | null>(null)
   const [dashboard, setDashboard] = useState<Dashboard>({ lessons_total: 0, lessons_completed: 0, completion: 0, average_score: 0, streak: 0 })
@@ -174,8 +160,6 @@ export function App() {
   const [selectedLesson, setSelectedLesson] = useState<LessonDetail | null>(null)
   const [lessonState, setLessonState] = useState<LoadState>('idle')
   const [lessonTargetId, setLessonTargetId] = useState<number | null>(null)
-
-  const [foundation, setFoundation] = useState<CourseDetail | null>(null)
 
   const courseReqId = useRef<number | null>(null)
   const lessonReqId = useRef<number | null>(null)
@@ -238,12 +222,6 @@ export function App() {
       .then((data) => {
         setCourses(data)
         setCatalogState(data.length ? 'success' : 'empty')
-        const foundations = data.find((course) => course.slug === 'python-foundations')
-        if (foundations) {
-          request<CourseDetail>(`/courses/${foundations.id}`, {}, failed)
-            .then(setFoundation)
-            .catch(() => {})
-        }
       })
       .catch(() => setCatalogState('error'))
   }
@@ -268,33 +246,28 @@ export function App() {
   }, [tab, courseState, courses])
 
   const openCourse = (course: CourseSummary) => {
+    navigate('/')
     setTab('course')
     setMobileNav(false)
     loadCourse(course.id)
   }
 
   const openLesson = (lesson: LessonSummary) => {
+    navigate('/')
     setTab('course')
     setMobileNav(false)
     loadLesson(lesson.id)
   }
 
   const onLessonLink = (targetId: number) => {
+    navigate('/')
     setTab('course')
     loadLesson(targetId)
   }
 
-  const openFoundation = () => {
-    setTab('practice')
+  const openPractice = () => {
+    navigate('/practice')
     setMobileNav(false)
-    if (!foundation) {
-      const foundations = courses.find((course) => course.slug === 'python-foundations')
-      if (foundations) {
-        request<CourseDetail>(`/courses/${foundations.id}`, {}, failed)
-          .then(setFoundation)
-          .catch(() => {})
-      }
-    }
   }
 
   const signOut = () => {
@@ -302,15 +275,17 @@ export function App() {
     setUser(null)
   }
 
+  const practiceRoute = location.pathname.startsWith('/practice')
+  const activeTab: Tab = practiceRoute ? 'practice' : tab
   const crumb =
-    tab === 'overview' ? tx('crumb.overview') : tab === 'course' ? (selectedCourse ? localizeCourse(locale, selectedCourse).title : tx('course.fallbackTitle')) : tx('crumb.practice')
+    activeTab === 'overview' ? tx('crumb.overview') : activeTab === 'course' ? (selectedCourse ? localizeCourse(locale, selectedCourse).title : tx('course.fallbackTitle')) : tx('crumb.practice')
 
   return (
     <I18nContext.Provider value={{ locale, setLocale, tx }}>
       <div
         className="stage"
         data-locale={locale}
-        data-view={tab}
+        data-view={activeTab}
         onMouseMove={(e) => setPointer({ x: e.clientX, y: e.clientY })}
       >
         <TrailCanvas pointer={pointer} theme={theme} />
@@ -325,9 +300,9 @@ export function App() {
             <span className="brand-sub">{tx('brand.sub')}</span>
           </div>
           <nav className="spine-nav">
-            <NavBtn active={tab === 'overview'} index="01" icon={<Home size={16} />} label={tx('nav.overview')} testId="nav-overview" onClick={() => { setTab('overview'); setMobileNav(false) }} />
-            <NavBtn active={tab === 'course'} index="02" icon={<BookOpen size={16} />} label={tx('nav.course')} testId="nav-course" onClick={() => { setTab('course'); setMobileNav(false) }} />
-            <NavBtn active={tab === 'practice'} index="03" icon={<Code2 size={16} />} label={tx('nav.practice')} testId="nav-practice" pill={tx('nav.new')} onClick={openFoundation} />
+            <NavBtn active={activeTab === 'overview'} index="01" icon={<Home size={16} />} label={tx('nav.overview')} testId="nav-overview" onClick={() => { navigate('/'); setTab('overview'); setMobileNav(false) }} />
+            <NavBtn active={activeTab === 'course'} index="02" icon={<BookOpen size={16} />} label={tx('nav.course')} testId="nav-course" onClick={() => { navigate('/'); setTab('course'); setMobileNav(false) }} />
+            <NavBtn active={activeTab === 'practice'} index="03" icon={<Code2 size={16} />} label={tx('nav.practice')} testId="nav-practice" pill={tx('nav.new')} onClick={openPractice} />
           </nav>
           <div className="spine-foot">
             <LangSwitch />
@@ -372,7 +347,7 @@ export function App() {
               )}
             </div>
           </header>
-          {tab === 'overview' && (
+          {!practiceRoute && tab === 'overview' && (
             <Overview
               courses={courses}
               catalogState={catalogState}
@@ -382,7 +357,7 @@ export function App() {
               pointer={pointer}
             />
           )}
-          {tab === 'course' && (
+          {!practiceRoute && tab === 'course' && (
             <CourseView
               courses={courses}
               course={selectedCourse}
@@ -392,6 +367,7 @@ export function App() {
               openCourse={openCourse}
               openLesson={openLesson}
               onLessonLink={onLessonLink}
+              onPractice={(lessonId) => navigate(`/practice?lesson_id=${lessonId}`)}
               onBack={() => setTab('overview')}
               onRetryCourse={() => courseTargetId != null && loadCourse(courseTargetId)}
               onRetryLesson={() => lessonTargetId != null && loadLesson(lessonTargetId)}
@@ -401,7 +377,7 @@ export function App() {
               theme={theme}
             />
           )}
-          {tab === 'practice' && <PracticeView foundation={foundation} openLesson={openLesson} />}
+          {practiceRoute && <div data-surface="practice"><PracticeRoutes locale={locale} theme={theme} authenticated={Boolean(user)} onAuth={() => setAuthOpen(true)} onOpenLesson={(lessonId) => openLesson({ id: lessonId, title: '', order: 0, duration: 0, has_exercises: false })} /></div>}
         </main>
         {authOpen && (
           <AuthModal
@@ -606,6 +582,7 @@ function CourseView({
   openCourse,
   openLesson,
   onLessonLink,
+  onPractice,
   onBack,
   onRetryCourse,
   onRetryLesson,
@@ -622,6 +599,7 @@ function CourseView({
   openCourse: (course: CourseSummary) => void
   openLesson: (lesson: LessonSummary) => void
   onLessonLink: (targetId: number) => void
+  onPractice: (lessonId: number) => void
   onBack: () => void
   onRetryCourse: () => void
   onRetryLesson: () => void
@@ -719,8 +697,15 @@ function CourseView({
                       copiedCode: tx('code.copied'),
                     }}
                   />
-                </React.Suspense>
-                <CodeRunner key={lesson.id} initial={lesson.exercises[0]?.starter_code || 'print("Hello, Python!")'} />
+                 </React.Suspense>
+                 {Boolean(lesson.practice_count) && (
+                   <button className="lesson-practice-link" type="button" onClick={() => onPractice(lesson.id)}>
+                     <Code2 size={17} />
+                     <span>{tx('practice.related', { n: lesson.practice_count || 0 })}</span>
+                     <ChevronRight size={16} />
+                   </button>
+                 )}
+                 <CodeRunner key={lesson.id} initial={lesson.exercises[0]?.starter_code || 'print("Hello, Python!")'} />
                 {lesson.exercises.length > 0 ? (
                   <ExerciseCard key={lesson.exercises[0].id} exercise={lesson.exercises[0]} user={user} onAuth={onAuth} />
                 ) : (
@@ -842,42 +827,6 @@ function ExerciseCard({
         </button>
       </div>
       {result && <p className={result.correct ? 'success' : 'error'}>{result.message}</p>}
-    </div>
-  )
-}
-
-function PracticeView({ foundation, openLesson }: { foundation: CourseDetail | null; openLesson: (lesson: LessonSummary) => void }) {
-  const { locale, tx } = useI18n()
-  const localized = foundation ? localizeCourse(locale, foundation) : undefined
-  return (
-    <div className="page practice-page" data-surface="practice">
-      <div className="hero compact-hero">
-        <p className="eyebrow">{tx('practice.eyebrow')}</p>
-        <h1 className="display">
-          <span className="display-latin">{tx('practice.kicker')}</span>
-          <span className="display-zh">{tx('practice.heading')}</span>
-          <i className="display-dot" />
-        </h1>
-        <p className="lede">{tx('practice.tagline')}</p>
-      </div>
-      {!foundation ? (
-        <StatePanel kind="loading" />
-      ) : (
-        <div className="practice-grid">
-          {localized?.lessons.map((lesson, i) => (
-            <button className="practice-card" key={lesson.id} type="button" onClick={() => openLesson(lesson)}>
-              <div className="practice-number">{String(i + 1).padStart(2, '0')}</div>
-              <div>
-                <h3>{lesson.title}</h3>
-                <p>{lesson.has_exercises ? tx('practice.open') : tx('practice.fallback')}</p>
-                <span>
-                  {tx('practice.open')} <ChevronRight size={15} />
-                </span>
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   )
 }
