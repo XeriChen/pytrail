@@ -126,18 +126,21 @@ function TrailCanvas({ pointer, theme }: { pointer: Vec; theme: Theme }) {
       if (!reduce) {
         particlesRef.current = stepScene(particlesRef.current, pointerRef.current, dt, { w, h })
       }
+      let particleIndex = 0
       for (const p of particlesRef.current) {
+        const particleHue = theme === 'light' ? particleIndex % 4 : p.hue
         const particleAlpha = theme === 'dark' ? 0.18 + p.life * 0.45 : 0.05 + p.life * 0.14
         ctx.beginPath()
-        ctx.fillStyle = particleColor(p.hue, particleAlpha, theme)
+        ctx.fillStyle = particleColor(particleHue, particleAlpha, theme)
         ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2)
         ctx.fill()
         ctx.beginPath()
-        ctx.strokeStyle = particleColor(p.hue, theme === 'dark' ? 0.16 : 0.055, theme)
+        ctx.strokeStyle = particleColor(particleHue, theme === 'dark' ? 0.16 : 0.055, theme)
         ctx.lineWidth = 0.7
         ctx.moveTo(p.x, p.y)
         ctx.lineTo(p.x - p.vx * 0.08, p.y - p.vy * 0.08)
         ctx.stroke()
+        particleIndex += 1
       }
       frame = requestAnimationFrame(tick)
     }

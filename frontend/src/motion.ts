@@ -61,7 +61,7 @@ export function createParticles(count: number, width: number, height: number): P
       oy: (i % 13) - 6,
       life: 0.35 + (i % 8) * 0.08,
       size: 1.1 + (i % 5) * 0.55,
-      hue: i % 4,
+      hue: i % 3,
     }
   })
 }
