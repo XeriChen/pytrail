@@ -428,6 +428,10 @@ button { cursor: pointer; }
   font-weight: 500;
 }
 
+.crumb-workspace-mobile {
+  display: none;
+}
+
 .mast-actions {
   display: flex;
   align-items: center;
@@ -1395,7 +1399,37 @@ input, textarea { cursor: text; }
     border: 0;
     background: var(--surface-scrim);
   }
-  .mast { padding: 0 20px; }
+  .mast {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    padding: 0 20px;
+    background: var(--surface-nav);
+  }
+  .crumb { min-width: 0; }
+  .crumb-workspace-desktop { display: none; }
+  .crumb-workspace-mobile {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    flex: 0 0 auto;
+    margin: 0;
+    padding: 8px 0;
+    border: 0;
+    color: inherit;
+    background: transparent;
+    font: inherit;
+  }
+  .crumb-workspace-mobile:focus-visible {
+    outline: 2px solid var(--lime);
+    outline-offset: 3px;
+  }
+  .crumb strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .page { padding: 32px 20px 80px; }
   .void-glyph { font-size: 24rem; }
   .display-zh { font-size: 7rem; }

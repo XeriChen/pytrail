@@ -527,6 +527,22 @@ describe('on-demand course and lesson workflow', () => {
     await waitForMarkdown()
   })
 
+  it('returns to the overview from the mobile workspace breadcrumb', async () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    await mount()
+    await waitFor(() => expect(screen.getAllByTestId('course-card')).toHaveLength(9))
+    fireEvent.click(screen.getAllByTestId('course-card')[0].querySelector('button')!)
+    await waitFor(() =>
+      expect(document.querySelector('[data-surface="course"]')).toBeInTheDocument(),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '工作台' }))
+
+    expect(document.querySelector('[data-surface="overview"]')).toBeInTheDocument()
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0 })
+    scrollTo.mockRestore()
+  })
+
   it('opens the independent practice catalog without preloading a course detail', async () => {
     const fetchMock = vi.mocked(fetch)
     await mount()

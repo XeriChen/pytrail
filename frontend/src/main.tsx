@@ -404,6 +404,13 @@ function AppShell() {
     }
   }, [tab, courseState, courses])
 
+  const openOverview = (resetScroll = false) => {
+    navigate('/')
+    setTab('overview')
+    setMobileNav(false)
+    if (resetScroll) window.scrollTo({ top: 0 })
+  }
+
   const openCourse = (course: CourseSummary) => {
     navigate('/')
     setTab('course')
@@ -491,11 +498,7 @@ function AppShell() {
               icon={<Home size={16} />}
               label={tx('nav.overview')}
               testId="nav-overview"
-              onClick={() => {
-                navigate('/')
-                setTab('overview')
-                setMobileNav(false)
-              }}
+              onClick={() => openOverview()}
             />
             <NavBtn
               active={activeTab === 'course'}
@@ -560,7 +563,14 @@ function AppShell() {
               <Menu size={20} />
             </button>
             <div className="crumb">
-              <span>{tx('crumb.workspace')}</span>
+              <span className="crumb-workspace-desktop">{tx('crumb.workspace')}</span>
+              <button
+                className="crumb-workspace-mobile"
+                type="button"
+                onClick={() => openOverview(true)}
+              >
+                {tx('crumb.workspace')}
+              </button>
               <ChevronRight size={14} />
               <strong>{crumb}</strong>
             </div>
