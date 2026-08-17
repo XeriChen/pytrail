@@ -52,11 +52,11 @@ http://localhost:8000/docs
 | `COURSE_CONTENT_ROOT` | `backend/app/course_sync.py` | 仓库内课程目录 | 覆盖时使用包含 9 个课程 slug 子目录的根目录 |
 | `SECRET_KEY` | `backend/app/auth.py` | 开发默认值 | 生产必须使用长随机值 |
 | `PYTRAIL_ENV` / `ENV` | `backend/app/auth.py` | `development` | `production` 或 `prod` 禁止默认密钥 |
-| `PYTRAIL_ENABLE_LEGACY_EXECUTE` | `backend/app/main.py` | 关闭 | 设为 `1` 且非生产环境时启用旧课内演练 `/api/execute`；隔离强度低，不要向公网开放 |
+| `PYTRAIL_ENABLE_LEGACY_EXECUTE` | `backend/app/main.py` | 关闭 | 设为 `1`/`true`/`yes`/`on` 且非生产、非无用户模式时启用旧课内演练 `/api/execute`；隔离强度低，不要向公网开放 |
 | `CORS_ORIGINS` | `backend/app/main.py` | `http://localhost:5173` | 逗号分隔；生产不要使用宽泛来源 |
 | `PYTRAIL_STATIC_DIR` | `backend/app/main.py` | 未设置 | 指向包含 `index.html` 的构建目录时，API 托管静态文件并为非 API 路径提供 SPA 回退 |
 | `PYTRAIL_PRACTICE_PYTHON` | `backend/app/practice_runner.py` | API 当前解释器 | 练习 worker 使用的 Python 命令或路径；目标环境必须安装兼容版本的 RestrictedPython |
-| `PYTRAIL_USERLESS_MODE` | `backend/app/auth.py`、`backend/app/main.py` | 关闭 | 设为 `1`/`true` 后关闭登录注册和所有进度写入，练习与速测允许匿名运行 |
+| `PYTRAIL_USERLESS_MODE` | `backend/app/auth.py`、`backend/app/main.py` | 关闭 | 设为 `1`/`true`/`yes`/`on` 后关闭登录注册、用户详情、dashboard 和所有进度写入，练习与速测允许匿名运行；旧 `/api/execute` 保持关闭 |
 | `VITE_API_URL` | `frontend/src/api.ts` | `/api` | 构建期变量 |
 | `VITE_API_PROXY_TARGET` | `frontend/vite.config.ts` | `http://127.0.0.1:8000` | 仅 Vite 开发代理 |
 
@@ -84,7 +84,7 @@ uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 ### 无用户部署
 
-设置 `PYTRAIL_USERLESS_MODE=1` 后，`GET /api/config` 会报告 `userless_mode: true`。前端会隐藏登录、注册、连击和进度展示，并清理浏览器中的旧 token。练习场运行与课内速测不再要求 Bearer token，API 返回 `progress: null` 或 `persisted: false`，不会创建或更新 `progress`、`exercise_progress`、`User` 记录。题库、课程正文和公开案例仍正常提供。
+设置 `PYTRAIL_USERLESS_MODE=1` 后，`GET /api/config` 会报告 `userless_mode: true`。前端会隐藏登录、注册、连击和进度展示，并清理浏览器中的旧 token。练习场运行与课内速测不再要求 Bearer token，API 返回 `progress: null` 或 `persisted: false`，不会创建或更新 `progress`、`exercise_progress`、`learning_activities`、`User` 记录。用户详情和 dashboard 返回 404，旧 `/api/execute` 保持关闭；题库、课程正文和公开案例仍正常提供。
 
 该开关默认关闭。它不等同于关闭代码执行安全边界：匿名请求仍受 IP 限流、源码大小、RestrictedPython、独立子进程和总超时限制。由于没有用户身份和历史记录，只适合临时演示或受信任内网；切换环境变量后必须重启 API 和静态前端服务。
 
@@ -94,7 +94,7 @@ uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 当前版本没有兼容迁移要求。需要全新本地状态时，先停止 API，再删除明确指定的本地 SQLite 文件，然后重新启动。不要对不确定路径、仓库根目录或 Compose 卷执行递归删除。
 
-内容变更会由启动同步自动重建目录数据并清空两类进度，用户账号保留。schema 本身发生变化时，应使用全新数据库验证；不要依赖 `create_all` 修改已存在的列。
+内容变更会由启动同步自动重建目录数据并清空课程进度、练习进度和学习活动，用户账号保留。schema 本身发生变化时，应使用全新数据库验证；不要依赖 `create_all` 修改已存在的列。
 
 ## Docker Compose
 
@@ -180,7 +180,7 @@ git status --short
 
 ### 修改内容后进度消失
 
-这是当前同步设计。课程 Markdown 或练习清单发生变化时，会重建整个目录并清空课程与练习进度。资源文件由文件系统直接提供；当前资源摘要不会触发数据库重建，因此替换图片不会自动清空进度，但部署时仍应重启或重新发布静态内容以确保实例拿到新文件。
+这是当前同步设计。课程 Markdown 或练习清单发生变化时，会重建整个目录并清空课程进度、练习进度与学习活动。资源文件由文件系统直接提供；当前资源摘要不会触发数据库重建，因此替换图片不会自动清空进度，但部署时仍应重启或重新发布静态内容以确保实例拿到新文件。
 
 ### 前端请求不到 API
 

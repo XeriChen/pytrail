@@ -10,6 +10,7 @@ from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session, selectinload
 
+from .activity_service import PRACTICE_PASSED, record_activity
 from .course_sync import COURSE_SPECS
 from .models import Exercise, ExerciseProgress, Lesson, User, utc_now
 from .schemas import (
@@ -186,6 +187,7 @@ def exercise_detail(
         function_name=exercise.function_name or "",
         signature=PracticeSignatureOut.model_validate(signature),
         starter_code=exercise.starter_code,
+        hints=exercise.hints,
         cases=[
             PracticeCaseOut(
                 order=case.order,
@@ -237,6 +239,13 @@ def record_run(
         },
     )
     db.execute(statement)
+    if passed:
+        record_activity(
+            db,
+            user_id=user.id,
+            kind=PRACTICE_PASSED,
+            source_key=exercise.slug or f"exercise:{exercise.id}",
+        )
     db.commit()
     db.expire_all()
     progress = db.scalar(

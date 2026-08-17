@@ -7,6 +7,7 @@ from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
+from .activity_service import record_activity
 from .models import Progress, utc_now
 
 
@@ -40,13 +41,22 @@ def build_progress_upsert(
 
 
 def upsert_lesson_progress(
-    db: Session, *, user_id: int, lesson_id: int, completed: bool, score: int
+    db: Session,
+    *,
+    user_id: int,
+    lesson_id: int,
+    completed: bool,
+    score: int,
+    activity_kind: str | None = None,
+    activity_source_key: str | None = None,
 ) -> Progress:
     """Insert or update the user's lesson progress in a single atomic statement.
 
     Concurrent first writes are safe: the dialect-specific ON CONFLICT clause
     turns the losing INSERT into an UPDATE instead of a unique-violation 500.
     """
+    if (activity_kind is None) != (activity_source_key is None):
+        raise ValueError("Learning activity kind and source must be provided together")
     statement = build_progress_upsert(
         db.get_bind().dialect.name,
         user_id=user_id,
@@ -55,6 +65,13 @@ def upsert_lesson_progress(
         score=score,
     )
     db.execute(statement)
+    if completed and activity_kind is not None and activity_source_key is not None:
+        record_activity(
+            db,
+            user_id=user_id,
+            kind=activity_kind,
+            source_key=activity_source_key,
+        )
     db.commit()
     progress = db.scalar(
         select(Progress).where(

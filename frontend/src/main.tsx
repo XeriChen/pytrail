@@ -5,8 +5,10 @@ import {
   ArrowLeft,
   ArrowRight,
   BookOpen,
+  CalendarDays,
   ChevronRight,
   CirclePlay,
+  Clock3,
   Code2,
   Flame,
   Globe,
@@ -75,17 +77,41 @@ type LessonDetail = LessonSummary & {
   lesson_links: Record<string, number>
 }
 type User = { id: number; name: string; email: string }
+type TodayTask = {
+  kind: 'lesson' | 'practice'
+  slug: string | null
+  lesson_id: number
+  title: string
+  course_slug: string
+  course_title: string
+  lesson_title: string
+  reason_code: 'resume_practice' | 'start_lesson' | 'start_practice' | 'review_practice'
+  estimated_minutes: number
+  completed: boolean
+}
 type Dashboard = {
   lessons_total: number
   lessons_completed: number
   completion: number
   average_score: number
   streak: number
+  today_task: TodayTask | null
+  recent_activity: string[]
 }
 type DeploymentConfig = { userless_mode: boolean }
 type DeploymentMode = 'loading' | 'standard' | 'userless' | 'error'
 type Tab = 'overview' | 'course' | 'practice'
 type LoadState = 'idle' | 'loading' | 'success' | 'error' | 'empty'
+
+const emptyDashboard = (): Dashboard => ({
+  lessons_total: 0,
+  lessons_completed: 0,
+  completion: 0,
+  average_score: 0,
+  streak: 0,
+  today_task: null,
+  recent_activity: [],
+})
 
 type I18n = {
   locale: Locale
@@ -183,13 +209,8 @@ function AppShell() {
   const [user, setUser] = useState<User | null>(null)
   const [deploymentMode, setDeploymentMode] = useState<DeploymentMode>('loading')
   const [configRequestKey, setConfigRequestKey] = useState(0)
-  const [dashboard, setDashboard] = useState<Dashboard>({
-    lessons_total: 0,
-    lessons_completed: 0,
-    completion: 0,
-    average_score: 0,
-    streak: 0,
-  })
+  const [dashboard, setDashboard] = useState<Dashboard>(emptyDashboard)
+  const [dashboardState, setDashboardState] = useState<LoadState>('idle')
   const [tab, setTab] = useState<Tab>('overview')
   const [authOpen, setAuthOpen] = useState(false)
   const [mobileNav, setMobileNav] = useState(false)
@@ -208,6 +229,8 @@ function AppShell() {
 
   const courseReqId = useRef<number | null>(null)
   const lessonReqId = useRef<number | null>(null)
+  const dashboardReqId = useRef(0)
+  const dashboardController = useRef<AbortController | null>(null)
   const selectedCourseRef = useRef<CourseDetail | null>(null)
 
   const failed = t(locale, 'request.failed')
@@ -220,6 +243,29 @@ function AppShell() {
   }
 
   const tx = (key: CopyKey, vars?: Record<string, string | number>) => t(locale, key, vars)
+
+  const loadDashboard = (showLoading = true) => {
+    dashboardController.current?.abort()
+    const controller = new AbortController()
+    const requestId = ++dashboardReqId.current
+    dashboardController.current = controller
+    if (showLoading) setDashboardState('loading')
+    request<Dashboard>('/dashboard', {}, failed, controller.signal)
+      .then((data) => {
+        if (dashboardReqId.current !== requestId) return
+        setDashboard({
+          ...data,
+          today_task: data.today_task ?? null,
+          recent_activity: data.recent_activity ?? [],
+        })
+        setDashboardState('success')
+      })
+      .catch((error) => {
+        if (error.name !== 'AbortError' && dashboardReqId.current === requestId) {
+          setDashboardState('error')
+        }
+      })
+  }
 
   useEffect(() => {
     document.documentElement.lang = documentLang(locale)
@@ -282,6 +328,10 @@ function AppShell() {
         if (config.userless_mode) {
           localStorage.removeItem('pytrail_token')
           setUser(null)
+          dashboardController.current?.abort()
+          dashboardReqId.current += 1
+          setDashboard(emptyDashboard())
+          setDashboardState('idle')
           setAuthOpen(false)
         }
       })
@@ -300,17 +350,23 @@ function AppShell() {
     if (deploymentMode === 'userless') {
       localStorage.removeItem('pytrail_token')
       setUser(null)
+      dashboardController.current?.abort()
+      dashboardReqId.current += 1
+      setDashboard(emptyDashboard())
+      setDashboardState('idle')
       return
     }
     if (localStorage.getItem('pytrail_token')) {
-      request<User>('/auth/me', {}, failed)
+      const controller = new AbortController()
+      request<User>('/auth/me', {}, failed, controller.signal)
         .then((u) => {
           setUser(u)
-          request<Dashboard>('/dashboard', {}, failed)
-            .then(setDashboard)
-            .catch(() => {})
+          loadDashboard()
         })
-        .catch(() => localStorage.removeItem('pytrail_token'))
+        .catch((error) => {
+          if (error.name !== 'AbortError') localStorage.removeItem('pytrail_token')
+        })
+      return () => controller.abort()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deploymentMode])
@@ -352,22 +408,26 @@ function AppShell() {
     setMobileNav(false)
   }
 
+  const openTodayTask = (task: TodayTask) => {
+    if (task.kind === 'practice' && task.slug) {
+      navigate(`/practice/${task.slug}`)
+      setMobileNav(false)
+      return
+    }
+    onLessonLink(task.lesson_id)
+  }
+
   const signOut = () => {
     localStorage.removeItem('pytrail_token')
+    dashboardController.current?.abort()
+    dashboardReqId.current += 1
     setUser(null)
-    setDashboard({
-      lessons_total: 0,
-      lessons_completed: 0,
-      completion: 0,
-      average_score: 0,
-      streak: 0,
-    })
+    setDashboard(emptyDashboard())
+    setDashboardState('idle')
   }
 
   const refreshDashboard = () => {
-    request<Dashboard>('/dashboard', {}, failed)
-      .then(setDashboard)
-      .catch(() => {})
+    if (user) loadDashboard(false)
   }
 
   const activeTab: Tab = practiceRoute ? 'practice' : tab
@@ -521,9 +581,13 @@ function AppShell() {
               courses={courses}
               catalogState={catalogState}
               dashboard={dashboard}
+              dashboardState={dashboardState}
+              authenticated={Boolean(user)}
               userlessMode={userlessMode}
               openCourse={openCourse}
+              openTodayTask={openTodayTask}
               onRetry={loadCourses}
+              onRetryDashboard={() => loadDashboard()}
               pointer={pointer}
             />
           )}
@@ -569,6 +633,7 @@ function AppShell() {
                     has_exercises: false,
                   })
                 }
+                onProgress={refreshDashboard}
               />
             </div>
           )}
@@ -580,7 +645,7 @@ function AppShell() {
               localStorage.setItem('pytrail_token', token)
               setUser(u)
               setAuthOpen(false)
-              refreshDashboard()
+              loadDashboard()
             }}
           />
         )}
@@ -676,16 +741,24 @@ function Overview({
   courses,
   catalogState,
   dashboard,
+  dashboardState,
+  authenticated,
   openCourse,
+  openTodayTask,
   onRetry,
+  onRetryDashboard,
   pointer,
   userlessMode,
 }: {
   courses: CourseSummary[]
   catalogState: LoadState
   dashboard: Dashboard
+  dashboardState: LoadState
+  authenticated: boolean
   openCourse: (course: CourseSummary) => void
+  openTodayTask: (task: TodayTask) => void
   onRetry: () => void
+  onRetryDashboard: () => void
   pointer: Vec
   userlessMode: boolean
 }) {
@@ -708,11 +781,31 @@ function Overview({
         <button
           className="primary-btn"
           type="button"
-          onClick={() => courses[0] && openCourse(courses[0])}
+          onClick={() =>
+            dashboard.today_task
+              ? openTodayTask(dashboard.today_task)
+              : courses[0] && openCourse(courses[0])
+          }
         >
           <CirclePlay size={18} /> {tx('overview.continue')}
         </button>
       </section>
+      {!userlessMode && authenticated && dashboardState === 'loading' && (
+        <div className="dashboard-state" role="status">
+          <span className="state-spinner" /> {tx('dashboard.loading')}
+        </div>
+      )}
+      {!userlessMode && authenticated && dashboardState === 'error' && (
+        <div className="dashboard-state error" role="alert">
+          <span>{tx('dashboard.failure')}</span>
+          <button className="secondary-btn" type="button" onClick={onRetryDashboard}>
+            <RotateCcw size={14} /> {tx('state.retry')}
+          </button>
+        </div>
+      )}
+      {!userlessMode && authenticated && dashboardState === 'success' && (
+        <LearningLoop dashboard={dashboard} locale={locale} onOpenTask={openTodayTask} />
+      )}
       {!userlessMode && (
         <section className="stats-grid">
           <Stat
@@ -761,6 +854,116 @@ function Overview({
         </div>
       )}
     </div>
+  )
+}
+
+const taskReasonKeys: Record<TodayTask['reason_code'], CopyKey> = {
+  resume_practice: 'today.reason.resumePractice',
+  start_lesson: 'today.reason.startLesson',
+  start_practice: 'today.reason.startPractice',
+  review_practice: 'today.reason.reviewPractice',
+}
+
+function recentActivityDays(activityDates: string[], locale: Locale) {
+  const active = new Set(activityDates)
+  const now = new Date()
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  const formatter = new Intl.DateTimeFormat(locale === 'zh' ? 'zh-CN' : 'en-US', {
+    weekday: 'narrow',
+    timeZone: 'UTC',
+  })
+  return Array.from({ length: 7 }, (_, index) => {
+    const value = new Date(today - (6 - index) * 86_400_000)
+    const iso = value.toISOString().slice(0, 10)
+    return {
+      iso,
+      label: formatter.format(value),
+      day: value.getUTCDate(),
+      active: active.has(iso),
+    }
+  })
+}
+
+function LearningLoop({
+  dashboard,
+  locale,
+  onOpenTask,
+}: {
+  dashboard: Dashboard
+  locale: Locale
+  onOpenTask: (task: TodayTask) => void
+}) {
+  const { tx } = useI18n()
+  const task = dashboard.today_task
+  const days = recentActivityDays(dashboard.recent_activity, locale)
+  const localizedCourse = task
+    ? localizeCourse(locale, {
+        slug: task.course_slug,
+        title: task.course_title,
+        description: '',
+        level: '',
+      }).title
+    : ''
+  return (
+    <section className="learning-loop" aria-labelledby="learning-loop-title">
+      <div className="learning-loop-heading">
+        <p className="eyebrow">{tx('today.eyebrow')}</p>
+        <h2 id="learning-loop-title">{tx('today.heading')}</h2>
+      </div>
+      <div className="learning-loop-grid">
+        <article className={`today-task-card ${task?.completed ? 'completed' : ''}`}>
+          {task ? (
+            <>
+              <div className="today-task-meta">
+                <span>{tx(taskReasonKeys[task.reason_code])}</span>
+                <span>
+                  <Clock3 size={14} />
+                  {tx('today.minutes', { n: task.estimated_minutes })}
+                </span>
+              </div>
+              <h3>{task.title}</h3>
+              <p>
+                {localizedCourse} / {task.lesson_title}
+              </p>
+              <button className="primary-btn" type="button" onClick={() => onOpenTask(task)}>
+                {task.completed ? tx('today.reviewAgain') : tx('today.open')}
+                <ArrowRight size={16} />
+              </button>
+            </>
+          ) : (
+            <div className="today-task-empty">
+              <h3>{tx('today.complete')}</h3>
+              <p>{tx('today.completeBody')}</p>
+            </div>
+          )}
+        </article>
+        <article className="activity-card">
+          <div className="activity-card-heading">
+            <div>
+              <CalendarDays size={18} />
+              <h3>{tx('activity.heading')}</h3>
+            </div>
+            <strong>{tx('activity.streak', { n: dashboard.streak })}</strong>
+          </div>
+          <ol className="activity-strip">
+            {days.map((day) => (
+              <li
+                className={day.active ? 'active' : ''}
+                key={day.iso}
+                aria-label={tx(day.active ? 'activity.activeDay' : 'activity.inactiveDay', {
+                  date: day.iso,
+                })}
+              >
+                <span>{day.label}</span>
+                <i />
+                <small>{day.day}</small>
+              </li>
+            ))}
+          </ol>
+          <p>{tx('activity.detail')}</p>
+        </article>
+      </div>
+    </section>
   )
 }
 

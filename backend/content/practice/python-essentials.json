@@ -16,6 +16,7 @@
         "returns": "dict[str, object]"
       },
       "starter_code": "def parse_number_lines(lines: list[str]) -> dict:\n    return {\"numbers\": [], \"invalid\": [], \"total\": 0}\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `parse_number_lines` 的参数和 strings, exceptions 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": [[" 12 ", "-3", "", "oops", "+5"]],
@@ -54,6 +55,7 @@
         "returns": "dict[str, object]"
       },
       "starter_code": "def normalize_user(payload: dict) -> dict:\n    return {\"name\": \"\", \"email\": \"\", \"roles\": [], \"active\": True}\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `normalize_user` 的参数和 json, dictionaries 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": [{"name": " Ada Lovelace ", "email": " ADA@Example.COM ", "roles": ["Admin", " editor ", "ADMIN", ""], "active": false, "token": "secret"}],
@@ -92,6 +94,7 @@
         "returns": "dict[str, object]"
       },
       "starter_code": "def summarize_rows(rows: list[dict[str, str]]) -> dict:\n    return {\"totals\": {}, \"valid_rows\": 0, \"invalid_rows\": 0}\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `summarize_rows` 的参数和 csv, aggregation 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": [[{"category": "Books", "amount": "12"}, {"category": " Games ", "amount": " 8 "}, {"category": "Books", "amount": "5"}, {"category": "Books", "amount": "4.5"}]],
@@ -125,6 +128,7 @@
         "returns": "list[dict[str, object]]"
       },
       "starter_code": "def validate_contacts(contacts: list[dict[str, str]]) -> list[dict]:\n    return []\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `validate_contacts` 的参数和 validation, strings 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": [[{"name": " Alice ", "phone": "13800138000", "email": "alice@example.com"}, {"name": "Bob", "phone": "12800138000", "email": "bob@example"}]],

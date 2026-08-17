@@ -45,6 +45,7 @@ const DETAIL = {
     returns: 'list[int]',
   },
   starter_code: 'def filter_and_square(numbers, minimum):\n    return []\n',
+  hints: ['先筛选不小于阈值的元素。', '可以使用列表推导式。', '筛选后对每个元素计算平方。'],
   cases: [
     {
       order: 1,
@@ -64,6 +65,7 @@ const PASSED = {
   passed_count: 1,
   total_count: 1,
   error: null,
+  feedback_category: 'all_passed',
   cases: [{ order: 1, passed: true, expected: [4], actual: [4], duration_ms: 0.2 }],
   progress: {
     status: 'passed',
@@ -143,10 +145,25 @@ describe('practice workspace', () => {
     await screen.findByRole('textbox', { name: 'Python 代码' })
     fireEvent.click(screen.getByRole('button', { name: '运行样例' }))
     expect(await screen.findByText('全部通过')).toBeInTheDocument()
+    expect(screen.getByText('思路正确，全部样例通过')).toBeInTheDocument()
     expect(screen.getByText('[4]')).toBeInTheDocument()
     await waitFor(() =>
       expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === 'POST')).toBe(true),
     )
+  })
+
+  it('reveals hints one layer at a time and resets them with the starter code', async () => {
+    mount(true)
+    await screen.findByRole('textbox', { name: 'Python 代码' })
+    expect(screen.queryByText(DETAIL.hints[0])).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '查看提示 1' }))
+    expect(screen.getByText(DETAIL.hints[0])).toBeInTheDocument()
+    expect(screen.queryByText(DETAIL.hints[1])).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '查看提示 2' }))
+    expect(screen.getByText(DETAIL.hints[1])).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '重置代码' }))
+    expect(screen.queryByText(DETAIL.hints[0])).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '查看提示 1' })).toBeInTheDocument()
   })
 
   it('runs without authentication in userless mode and returns no progress', async () => {

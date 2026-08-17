@@ -53,6 +53,11 @@ backend/content/practice/<course-slug>.json
         "returns": "list[int]"
       },
       "starter_code": "def filter_and_square(numbers: list[int], minimum: int) -> list[int]:\n    return []\n",
+      "hints": [
+        "先筛选出不小于 minimum 的元素。",
+        "可以用列表推导式同时完成筛选和映射。",
+        "对每个保留的元素返回 value ** 2。"
+      ],
       "cases": [
         {
           "args": [[1, 2, 3], 2],
@@ -82,6 +87,7 @@ backend/content/practice/<course-slug>.json
 | `function_name` | 合法且非关键字的公开 Python 标识符，不能以下划线开头 |
 | `signature.parameters` | 最多 8 个，名称唯一且合法 |
 | `starter_code` | 非空，最长 12,000 字符，必须定义目标函数 |
+| `hints` | 恰好 3 条非空渐进提示，每条最长 4,000 字符 |
 | `cases` | 2 至 8 个公开案例 |
 | `comparison` | 可选，`exact` 或 `approximate` |
 | `tolerance` | 可选，大于 0 且不超过 1，默认 `1e-6` |
@@ -98,6 +104,7 @@ backend/content/practice/<course-slug>.json
 - `expected` 与返回类型严格一致，`1` 和 `true` 不视为相同结果；
 - 近似比较只用于确有浮点误差的数值题；
 - 起始代码保留任务结构，但不包含完整答案；
+- 三层提示从理解样例、选择结构到伪代码逐步具体，不在第一层直接给出完整答案；
 - 难度与当前 36 题的相对复杂度一致；
 - 标签描述知识点，不使用随意的展示文案。
 
@@ -127,7 +134,7 @@ backend/content/practice/<course-slug>.json
 
 worker 默认使用 API 当前解释器。临时非 Docker 部署可通过 `PYTRAIL_PRACTICE_PYTHON` 指向本机 Python；该解释器必须安装兼容版本的 RestrictedPython。这个设置只改变解释器选择，不关闭 AST 校验、`-I`、独立子进程、总超时或协议限制，也不提供容器级隔离。
 
-受信任的临时部署可设置 `PYTRAIL_USERLESS_MODE=1`。此时函数题和课内速测不要求登录，函数题响应的 `progress` 为 `null`，速测和课时进度接口返回 `persisted: false`；服务端不会写入用户、课程进度或练习进度。匿名运行仍必须遵守每 IP 限流、源码限制和全部 worker 安全边界。
+受信任的临时部署可设置 `PYTRAIL_USERLESS_MODE=1`。此时函数题和课内速测不要求登录，函数题响应的 `progress` 为 `null`，速测和课时进度接口返回 `persisted: false`；服务端不会写入用户、课程进度、练习进度或学习活动。匿名运行仍必须遵守每 IP 限流、源码限制和全部 worker 安全边界。
 
 所有案例都是公开案例。产品当前没有隐藏测试、得分、排名或提交历史，不要在文档或 UI 中暗示这些能力。
 
@@ -145,9 +152,10 @@ worker 默认使用 API 当前解释器。临时非 Docker 部署可通过 `PYTR
 详情 API 分别返回：
 
 - `starter_code`：始终是官方模板；
+- `hints`：固定三层提示，前端逐层揭示；
 - `progress.last_code`：登录用户最近代码。
 
-前端编辑器优先使用 `progress.last_code`，否则使用 `starter_code`。重置操作只恢复官方模板，并在丢弃用户编辑前确认。
+前端编辑器优先使用 `progress.last_code`，否则使用 `starter_code`。重置操作只恢复官方模板，并在丢弃用户编辑前确认，同时收起已揭示提示。运行响应的 `feedback_category` 为 `all_passed`、`wrong_output`、`runtime_error` 或 `validation_error`；它是稳定的界面反馈分类，不是完整代码诊断。
 
 ## 修改流程
 
@@ -160,7 +168,7 @@ worker 默认使用 API 当前解释器。临时非 Docker 部署可通过 `PYTR
 7. 验证匿名详情、登录运行、失败结果、通过状态和最近代码恢复。
 8. 检查桌面双栏、移动三 tab、明暗主题和长 JSON 输出。
 
-练习清单变化会触发全量目录重建并清空课程与练习进度。当前阶段这是有意行为。
+练习清单变化会触发全量目录重建并清空课程进度、练习进度与学习活动。当前阶段这是有意行为。
 
 ## API 参考
 
@@ -170,8 +178,8 @@ worker 默认使用 API 当前解释器。临时非 Docker 部署可通过 `PYTR
 
 ### `GET /api/practice/exercises/{slug}`
 
-公开。返回题面、签名、官方模板和全部公开案例。有效 Bearer token 会附带该用户进度。
+公开。返回题面、签名、官方模板、三层提示和全部公开案例。有效 Bearer token 会附带该用户进度。
 
 ### `POST /api/practice/exercises/{slug}/run`
 
-需要登录，请求体为 `{ "code": "..." }`。语法、签名、运行时异常、超时和错误答案返回结构化练习结果；鉴权、限流、大小限制、找不到题目和运行基础设施故障使用 HTTP 错误。
+标准模式需要登录；无用户模式允许匿名调用。请求体为 `{ "code": "..." }`。语法、签名、运行时异常、超时和错误答案返回结构化练习结果及 `feedback_category`；鉴权、限流、大小限制、找不到题目和运行基础设施故障使用 HTTP 错误。

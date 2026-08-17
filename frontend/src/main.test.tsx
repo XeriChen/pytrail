@@ -227,6 +227,7 @@ const PRACTICE_DETAIL = {
     returns: 'list[int]',
   },
   starter_code: 'def filter_and_square(numbers, minimum):\n    return []\n',
+  hints: ['先筛选元素。', '使用列表推导式。', '再计算平方。'],
   cases: [
     {
       order: 1,
@@ -303,6 +304,19 @@ function baseRespond(input: RequestInfo | URL): Promise<Response> {
       completion: 0,
       average_score: 0,
       streak: 0,
+      today_task: {
+        kind: 'lesson',
+        slug: null,
+        lesson_id: 101,
+        title: '初识Python',
+        course_slug: 'python-foundations',
+        course_title: 'Python 基础',
+        lesson_title: '初识Python',
+        reason_code: 'start_lesson',
+        estimated_minutes: 12,
+        completed: false,
+      },
+      recent_activity: [new Date().toISOString().slice(0, 10)],
     })
   return respond({ detail: 'Not found' }, 404)
 }
@@ -729,5 +743,45 @@ describe('on-demand course and lesson workflow', () => {
     expect(await screen.findByText('连续 0 天')).toBeInTheDocument()
     expect(localStorage.getItem('pytrail_token')).toBeNull()
     expect(screen.getByTestId('nav-signin')).toBeInTheDocument()
+  })
+
+  it('renders the dashboard learning loop and opens its recommended lesson', async () => {
+    localStorage.setItem('pytrail_token', 'test-token')
+    await mount()
+    expect(await screen.findByRole('heading', { name: '下一步，清晰可见' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '初识Python' })).toBeInTheDocument()
+    expect(screen.getByText('最近 7 天')).toBeInTheDocument()
+    expect(screen.getByLabelText(/有有效学习活动/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /开始今日任务/ }))
+    await waitFor(() =>
+      expect(screen.getAllByRole('heading', { name: '初识Python' }).length).toBeGreaterThan(1),
+    )
+  })
+
+  it('retries a failed dashboard request', async () => {
+    localStorage.setItem('pytrail_token', 'test-token')
+    let dashboardCalls = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        if (String(input).includes('/api/dashboard')) {
+          dashboardCalls += 1
+          if (dashboardCalls === 1) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ detail: 'Unavailable' }), {
+                status: 503,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+          }
+        }
+        return baseRespond(input)
+      }),
+    )
+    await mount()
+    expect(await screen.findByText('学习计划暂时无法加载。')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '重试' }))
+    expect(await screen.findByRole('heading', { name: '下一步，清晰可见' })).toBeInTheDocument()
+    expect(dashboardCalls).toBe(2)
   })
 })

@@ -10,10 +10,11 @@ from urllib.parse import unquote
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, load_only, selectinload
 
+from .activity_service import LESSON_COMPLETED, QUICK_CHECK_CORRECT
 from .auth import (
     create_token,
     enforce_secret_key_policy,
@@ -24,9 +25,10 @@ from .auth import (
     verify_password,
 )
 from .course_sync import ContentSyncError, resolve_content_root, sync_courses
+from .dashboard_service import build_dashboard
 from .database import Base, SessionLocal, engine, get_db
-from .metrics import as_utc_date, compute_streak
-from .models import Course, Exercise, Lesson, Progress, User
+from .models import Course, Exercise, Lesson, User
+from .practice_feedback import classify_result
 from .practice_runner import (
     MAX_SOURCE_BYTES,
     PracticeCaseInput,
@@ -47,6 +49,7 @@ from .ratelimit import auth_limiter, practice_limiter
 from .schemas import (
     CourseDetailOut,
     CourseSummaryOut,
+    DashboardOut,
     ExecuteIn,
     ExerciseOut,
     ExerciseSubmit,
@@ -372,6 +375,7 @@ def run_practice_exercise(
         }
     except (OSError, PracticeRunnerUnavailable) as exc:
         raise HTTPException(503, "Practice runner unavailable") from exc
+    result["feedback_category"] = classify_result(result)
     if user is None:
         result["progress"] = None
     else:
@@ -409,7 +413,7 @@ def course_asset(course_slug: str, asset_path: str):
     )
 
 
-@app.get("/api/dashboard")
+@app.get("/api/dashboard", response_model=DashboardOut)
 def dashboard(
     user: User | None = Depends(optional_current_user), db: Session = Depends(get_db)
 ):
@@ -418,32 +422,7 @@ def dashboard(
             404 if is_userless_mode() else 401,
             "Not found" if is_userless_mode() else "Authentication required",
         )
-    total = db.scalar(select(func.count(Lesson.id))) or 0
-    completed = (
-        db.scalar(
-            select(func.count(Progress.id)).where(
-                Progress.user_id == user.id, Progress.completed.is_(True)
-            )
-        )
-        or 0
-    )
-    avg_score = (
-        db.scalar(select(func.avg(Progress.score)).where(Progress.user_id == user.id))
-        or 0
-    )
-    stamps = db.scalars(
-        select(Progress.updated_at).where(
-            Progress.user_id == user.id, Progress.completed.is_(True)
-        )
-    ).all()
-    streak = compute_streak([as_utc_date(stamp) for stamp in stamps if stamp])
-    return {
-        "lessons_total": total,
-        "lessons_completed": completed,
-        "completion": round((completed / total) * 100) if total else 0,
-        "average_score": round(avg_score),
-        "streak": streak,
-    }
+    return build_dashboard(db, user)
 
 
 @app.post("/api/progress")
@@ -452,7 +431,8 @@ def update_progress(
     user: User | None = Depends(optional_current_user),
     db: Session = Depends(get_db),
 ):
-    if db.get(Lesson, payload.lesson_id) is None:
+    lesson = db.get(Lesson, payload.lesson_id)
+    if lesson is None:
         raise HTTPException(404, "Lesson not found")
     if is_userless_mode():
         return {
@@ -469,6 +449,8 @@ def update_progress(
         lesson_id=payload.lesson_id,
         completed=payload.completed,
         score=max(0, min(payload.score, 100)),
+        activity_kind=LESSON_COMPLETED,
+        activity_source_key=lesson.source_path or f"lesson:{lesson.id}",
     )
     return {"ok": True, "lesson_id": payload.lesson_id, "completed": progress.completed}
 
@@ -504,6 +486,8 @@ def submit_exercise(
         lesson_id=exercise.lesson_id,
         completed=correct,
         score=score,
+        activity_kind=QUICK_CHECK_CORRECT,
+        activity_source_key=exercise.slug or f"quick-check:{exercise.id}",
     )
     return {
         "correct": correct,

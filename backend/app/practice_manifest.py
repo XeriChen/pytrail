@@ -16,6 +16,8 @@ COMPARISONS = frozenset({"exact", "approximate"})
 MAX_CASE_BYTES = 8_000
 MAX_PROMPT_CHARS = 20_000
 MAX_STARTER_CHARS = 12_000
+MAX_HINT_CHARS = 4_000
+MAX_HINTS = 3
 
 
 class PracticeManifestError(RuntimeError):
@@ -56,6 +58,7 @@ class PracticeExerciseSeed:
     function_name: str
     signature: FunctionSignatureSeed
     starter_code: str
+    hints: tuple[str, ...]
     cases: tuple[PracticeCaseSeed, ...]
 
 
@@ -232,6 +235,15 @@ def _parse_exercise(
         raise PracticeManifestError(
             f"{context}: starter_code must define {function_name}"
         )
+    raw_hints = value.get("hints")
+    if not isinstance(raw_hints, list) or len(raw_hints) != MAX_HINTS:
+        raise PracticeManifestError(
+            f"{context}: hints must contain exactly {MAX_HINTS} items"
+        )
+    hints = tuple(
+        _required_text(raw_hint, "text", f"{context}: hint {position}", MAX_HINT_CHARS)
+        for position, raw_hint in enumerate(raw_hints, start=1)
+    )
     raw_cases = value.get("cases")
     if not isinstance(raw_cases, list) or not 2 <= len(raw_cases) <= 8:
         raise PracticeManifestError(
@@ -252,6 +264,7 @@ def _parse_exercise(
         function_name,
         signature,
         starter_code,
+        hints,
         cases,
     )
 

@@ -580,6 +580,175 @@ button { cursor: pointer; }
   perspective: 900px;
 }
 
+.dashboard-state {
+  display: flex;
+  min-height: 90px;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 28px;
+  border: 1px solid var(--line);
+  color: var(--paper-dim);
+  background: var(--panel);
+  font-size: 13px;
+}
+
+.dashboard-state.error {
+  flex-wrap: wrap;
+  padding: 16px;
+}
+
+.learning-loop {
+  margin-bottom: 30px;
+}
+.learning-loop-heading {
+  margin-bottom: 16px;
+}
+.learning-loop-heading h2 {
+  margin: 7px 0 0;
+  font: 700 28px/1.2 var(--font-display);
+}
+.learning-loop-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(300px, 0.85fr);
+  gap: 16px;
+}
+.today-task-card,
+.activity-card {
+  min-width: 0;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  backdrop-filter: blur(16px);
+}
+.today-task-card {
+  position: relative;
+  display: flex;
+  min-height: 220px;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 24px;
+  overflow: hidden;
+}
+.today-task-card::after {
+  position: absolute;
+  right: -36px;
+  bottom: -66px;
+  width: 180px;
+  height: 180px;
+  border: 1px solid color-mix(in srgb, var(--cinnabar) 34%, transparent);
+  border-radius: 50%;
+  content: '';
+  pointer-events: none;
+}
+.today-task-card.completed::after {
+  border-color: color-mix(in srgb, var(--jade) 40%, transparent);
+}
+.today-task-meta {
+  display: flex;
+  width: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  color: var(--gold);
+  font: 10px var(--font-mono);
+  text-transform: uppercase;
+}
+.today-task-meta span:last-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--mist);
+  white-space: nowrap;
+}
+.today-task-card h3 {
+  max-width: 36rem;
+  margin: 24px 0 8px;
+  font: 700 25px/1.25 var(--font-display);
+  overflow-wrap: anywhere;
+}
+.today-task-card > p,
+.today-task-empty p {
+  margin: 0 0 22px;
+  color: var(--paper-dim);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.today-task-card .primary-btn {
+  z-index: 1;
+  margin-top: auto;
+  padding: 11px 17px;
+}
+.today-task-empty {
+  display: grid;
+  align-content: center;
+  min-height: 170px;
+}
+.activity-card {
+  padding: 22px;
+}
+.activity-card-heading,
+.activity-card-heading > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.activity-card-heading {
+  justify-content: space-between;
+}
+.activity-card-heading > div {
+  color: var(--jade);
+}
+.activity-card-heading h3 {
+  margin: 0;
+  color: var(--paper);
+  font-size: 15px;
+  font-weight: 500;
+}
+.activity-card-heading strong {
+  color: var(--gold);
+  font: 11px var(--font-mono);
+  white-space: nowrap;
+}
+.activity-strip {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 7px;
+  margin: 28px 0 20px;
+  padding: 0;
+  list-style: none;
+}
+.activity-strip li {
+  display: grid;
+  min-width: 0;
+  justify-items: center;
+  gap: 7px;
+  color: var(--mist);
+  font: 9px var(--font-mono);
+}
+.activity-strip i {
+  width: min(100%, 28px);
+  aspect-ratio: 1;
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  background: var(--surface-soft);
+}
+.activity-strip li.active i {
+  border-color: color-mix(in srgb, var(--jade) 58%, var(--line));
+  background: color-mix(in srgb, var(--jade) 52%, var(--surface-soft));
+  box-shadow: 0 0 16px color-mix(in srgb, var(--jade) 20%, transparent);
+}
+.activity-strip li.active {
+  color: var(--paper-dim);
+}
+.activity-card > p {
+  margin: 0;
+  color: var(--mist);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
 .stat-card {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -1226,6 +1395,7 @@ input, textarea { cursor: text; }
   .void-glyph { font-size: 24rem; }
   .display-zh { font-size: 7rem; }
   .stats-grid { grid-template-columns: 1fr; }
+  .learning-loop-grid { grid-template-columns: 1fr; }
   .course-feature { grid-template-columns: 1fr; }
   .course-visual { min-height: 210px; }
   .course-layout { grid-template-columns: 1fr; gap: 25px; }
@@ -1248,6 +1418,10 @@ input, textarea { cursor: text; }
 @media (max-width: 560px) {
   .course-header { display: block; }
   .hero .primary-btn { margin-top: 8px; }
+  .today-task-card,
+  .activity-card { padding: 18px; }
+  .today-task-card { min-height: 210px; }
+  .activity-strip { gap: 4px; }
   .display-zh { font-size: 4.2rem; }
   .display-latin { font-size: 1rem; }
   .void-glyph { font-size: 16rem; }

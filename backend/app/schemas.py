@@ -77,6 +77,31 @@ class CourseDetailOut(CourseSummaryOut):
     lessons: list[LessonSummaryOut]
 
 
+class TodayTaskOut(BaseModel):
+    kind: Literal["lesson", "practice"]
+    slug: str | None = None
+    lesson_id: int
+    title: str
+    course_slug: str
+    course_title: str
+    lesson_title: str
+    reason_code: Literal[
+        "resume_practice", "start_lesson", "start_practice", "review_practice"
+    ]
+    estimated_minutes: int
+    completed: bool
+
+
+class DashboardOut(BaseModel):
+    lessons_total: int
+    lessons_completed: int
+    completion: int
+    average_score: int
+    streak: int
+    today_task: TodayTaskOut | None = None
+    recent_activity: list[str] = Field(default_factory=list)
+
+
 class LessonDetailOut(LessonSummaryOut):
     course_id: int
     course_slug: str
@@ -169,6 +194,7 @@ class PracticeDetailOut(PracticeExerciseOut):
     function_name: str
     signature: PracticeSignatureOut
     starter_code: str
+    hints: list[str] = Field(default_factory=list)
     cases: list[PracticeCaseOut]
 
 
@@ -191,5 +217,8 @@ class PracticeRunOut(BaseModel):
     passed_count: int
     total_count: int
     error: str | None
+    feedback_category: Literal[
+        "all_passed", "wrong_output", "runtime_error", "validation_error"
+    ]
     cases: list[PracticeRunCaseOut]
     progress: PracticeProgressOut | None = None

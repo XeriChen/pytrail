@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   CircleX,
   Code2,
+  Lightbulb,
   Maximize2,
   Minimize2,
   Play,
@@ -15,7 +16,7 @@ import {
 } from 'lucide-react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { apiRequest } from '../api'
-import type { Locale } from '../i18n'
+import { t, type Locale } from '../i18n'
 import type { Theme } from '../theme'
 import type { PracticeDetail, PracticeRunResult } from './types'
 
@@ -32,6 +33,7 @@ export function PracticeWorkspace({
   userId,
   onAuth,
   onOpenLesson,
+  onProgress,
 }: {
   locale: Locale
   theme: Theme
@@ -41,6 +43,7 @@ export function PracticeWorkspace({
   userId: number | null
   onAuth: () => void
   onOpenLesson: (lessonId: number) => void
+  onProgress?: () => void
 }) {
   const zh = locale === 'zh'
   const zhRef = useRef(zh)
@@ -53,6 +56,7 @@ export function PracticeWorkspace({
   const [state, setState] = useState<'loading' | 'success' | 'error'>('loading')
   const [running, setRunning] = useState(false)
   const [result, setResult] = useState<PracticeRunResult | null>(null)
+  const [revealedHints, setRevealedHints] = useState(0)
   const [mobileTab, setMobileTab] = useState<'statement' | 'code' | 'results'>('statement')
   const [editorFullscreen, setEditorFullscreen] = useState(false)
   const [requestKey, setRequestKey] = useState(0)
@@ -68,6 +72,7 @@ export function PracticeWorkspace({
     setState('loading')
     setDetail(null)
     setResult(null)
+    setRevealedHints(0)
     apiRequest<PracticeDetail>(
       `/practice/exercises/${slug}`,
       {},
@@ -75,7 +80,7 @@ export function PracticeWorkspace({
       controller.signal,
     )
       .then((value) => {
-        setDetail(value)
+        setDetail({ ...value, hints: value.hints ?? [] })
         setCode(value.progress?.last_code || value.starter_code)
         setState('success')
       })
@@ -139,7 +144,15 @@ export function PracticeWorkspace({
         { method: 'POST', body: JSON.stringify({ code }) },
         zh ? '运行失败' : 'Run failed',
       )
-      if (runRequestId.current === currentRequest) setResult(nextResult)
+      if (runRequestId.current === currentRequest) {
+        setResult(nextResult)
+        if (nextResult.progress) {
+          setDetail((current) =>
+            current ? { ...current, progress: nextResult.progress } : current,
+          )
+          onProgress?.()
+        }
+      }
     } catch (error) {
       if (runRequestId.current === currentRequest) {
         setResult({
@@ -148,6 +161,7 @@ export function PracticeWorkspace({
           passed_count: 0,
           total_count: detail.cases.length,
           error: error instanceof Error ? error.message : zh ? '运行失败' : 'Run failed',
+          feedback_category: 'runtime_error',
           cases: [],
           progress: detail.progress,
         })
@@ -166,7 +180,24 @@ export function PracticeWorkspace({
       return
     setCode(detail?.starter_code || '')
     setResult(null)
+    setRevealedHints(0)
   }
+
+  const feedbackCategory =
+    result?.feedback_category ??
+    (result?.passed ? 'all_passed' : result?.error ? 'runtime_error' : 'wrong_output')
+  const feedbackCopy = {
+    all_passed: [t(locale, 'feedback.allPassedTitle'), t(locale, 'feedback.allPassedBody')],
+    wrong_output: [t(locale, 'feedback.wrongOutputTitle'), t(locale, 'feedback.wrongOutputBody')],
+    runtime_error: [
+      t(locale, 'feedback.runtimeErrorTitle'),
+      t(locale, 'feedback.runtimeErrorBody'),
+    ],
+    validation_error: [
+      t(locale, 'feedback.validationErrorTitle'),
+      t(locale, 'feedback.validationErrorBody'),
+    ],
+  }[feedbackCategory]
 
   if (state === 'loading')
     return (
@@ -258,6 +289,39 @@ export function PracticeWorkspace({
               <code>{signature}</code>
             </div>
           </div>
+          <section className="practice-hints" aria-labelledby="practice-hints-title">
+            <div className="practice-hints-head">
+              <div>
+                <Lightbulb size={18} />
+                <h2 id="practice-hints-title">{t(locale, 'hints.title')}</h2>
+              </div>
+              <span>
+                {t(locale, 'hints.progress', {
+                  shown: revealedHints,
+                  total: detail.hints.length,
+                })}
+              </span>
+            </div>
+            {revealedHints === 0 && <p>{t(locale, 'hints.intro')}</p>}
+            <ol>
+              {detail.hints.slice(0, revealedHints).map((hint, index) => (
+                <li key={`${index}-${hint}`}>{hint}</li>
+              ))}
+            </ol>
+            <button
+              className="secondary-btn reveal-hint-btn"
+              type="button"
+              disabled={revealedHints >= detail.hints.length}
+              onClick={() =>
+                setRevealedHints((current) => Math.min(current + 1, detail.hints.length))
+              }
+            >
+              <Lightbulb size={15} />
+              {revealedHints < detail.hints.length
+                ? t(locale, 'hints.reveal', { n: revealedHints + 1 })
+                : t(locale, 'hints.complete')}
+            </button>
+          </section>
           <div className="public-cases">
             <h2>{zh ? '公开样例' : 'Public examples'}</h2>
             {detail.cases.map((item) => (
@@ -357,7 +421,10 @@ export function PracticeWorkspace({
             </button>
           </div>
         </section>
-        <aside className={`workspace-results ${mobileTab === 'results' ? 'mobile-active' : ''}`}>
+        <aside
+          className={`workspace-results ${mobileTab === 'results' ? 'mobile-active' : ''}`}
+          aria-live="polite"
+        >
           <div className="results-head">
             <span>{zh ? '运行结果' : 'Run results'}</span>
             {result && (
@@ -385,6 +452,12 @@ export function PracticeWorkspace({
               <CircleX size={18} />
               <span>{result.error}</span>
             </div>
+          )}
+          {result && (
+            <section className={`feedback-panel ${feedbackCategory}`}>
+              <strong>{feedbackCopy[0]}</strong>
+              <p>{feedbackCopy[1]}</p>
+            </section>
           )}
           {result?.cases.map((item) => (
             <article
