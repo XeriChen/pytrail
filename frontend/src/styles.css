@@ -179,16 +179,21 @@ button { cursor: pointer; }
   -webkit-mask-image: linear-gradient(to bottom, transparent, #000 16%, #000 84%, transparent);
 }
 
+.trail-backdrop,
 .trail-canvas,
 .grain,
 .void-glyph {
   pointer-events: none;
 }
 
+.trail-backdrop,
 .trail-canvas {
   position: fixed;
   inset: 0;
   z-index: 0;
+}
+
+.trail-backdrop {
   background: var(--canvas-background);
 }
 
@@ -202,7 +207,7 @@ button { cursor: pointer; }
 }
 
 [data-theme='light'] .grain { mix-blend-mode: multiply; }
-[data-theme='light'] .trail-canvas { opacity: 0.88; }
+[data-theme='light'] :is(.trail-backdrop, .trail-canvas) { opacity: 0.88; }
 [data-theme='light'] .void-glyph {
   opacity: 1;
   color: rgba(240, 241, 236, 0.18);

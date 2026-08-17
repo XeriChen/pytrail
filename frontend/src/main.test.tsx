@@ -368,6 +368,27 @@ describe('on-demand course and lesson workflow', () => {
     expect(screen.getByText('项目与生产实践')).toBeInTheDocument()
   })
 
+  it('does not mount the pointer particle canvas on mobile interfaces', async () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        matches: query === '(prefers-color-scheme: dark)',
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    )
+
+    await mount()
+
+    expect(document.querySelector('.trail-canvas')).not.toBeInTheDocument()
+    expect(document.querySelector('.trail-backdrop')).toBeInTheDocument()
+  })
+
   it('persists a manual theme choice from the sidebar control', async () => {
     await mount()
     const toggle = await screen.findByRole('button', {

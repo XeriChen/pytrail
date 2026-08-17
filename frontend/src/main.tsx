@@ -120,11 +120,31 @@ type I18n = {
 }
 
 const I18nContext = createContext<I18n | null>(null)
+const DESKTOP_PARTICLES_QUERY = '(min-width: 901px) and (hover: hover) and (pointer: fine)'
 
 function useI18n(): I18n {
   const ctx = useContext(I18nContext)
   if (!ctx) throw new Error('i18n missing')
   return ctx
+}
+
+function useMediaQuery(query: string): boolean {
+  const getMatches = () =>
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia(query).matches
+      : false
+  const [matches, setMatches] = useState(getMatches)
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
+    const media = window.matchMedia(query)
+    const onChange = (event: MediaQueryListEvent) => setMatches(event.matches)
+    setMatches(media.matches)
+    media.addEventListener('change', onChange)
+    return () => media.removeEventListener('change', onChange)
+  }, [query])
+
+  return matches
 }
 
 function TrailCanvas({ pointer, theme }: { pointer: Vec; theme: Theme }) {
@@ -202,6 +222,7 @@ function AppShell() {
   const { theme, toggleTheme } = useTheme()
   const location = useLocation()
   const navigate = useNavigate()
+  const particlesEnabled = useMediaQuery(DESKTOP_PARTICLES_QUERY)
   const practiceRoute = location.pathname.startsWith('/practice')
   const [locale, setLocaleState] = useState<Locale>(() =>
     readLocale(typeof localStorage === 'undefined' ? null : localStorage),
@@ -447,9 +468,12 @@ function AppShell() {
         data-locale={locale}
         data-view={activeTab}
         data-deployment-notice={userlessMode || deploymentMode === 'error' ? 'true' : 'false'}
-        onMouseMove={(e) => setPointer({ x: e.clientX, y: e.clientY })}
+        onMouseMove={
+          particlesEnabled ? (e) => setPointer({ x: e.clientX, y: e.clientY }) : undefined
+        }
       >
-        <TrailCanvas pointer={pointer} theme={theme} />
+        <div className="trail-backdrop" aria-hidden="true" />
+        {particlesEnabled && <TrailCanvas pointer={pointer} theme={theme} />}
         <div className="grain" aria-hidden="true" />
         <div className="void-glyph" aria-hidden="true">
           {tx('brand.mark')}
