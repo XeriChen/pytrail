@@ -22,7 +22,7 @@ export async function apiRequest<T>(
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(options.headers || {}),
+      ...options.headers,
     },
   })
   if (!response.ok) {

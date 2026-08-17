@@ -1,8 +1,8 @@
 """RestrictedPython worker. Communicates with the API process over JSON stdio."""
 
 from __future__ import annotations
-
 import __future__
+
 import json
 import math
 import sys
@@ -57,10 +57,24 @@ def _matches(actual: Any, expected: Any, comparison: str, tolerance: float) -> b
             return actual == expected
         if isinstance(actual, (int, float)) and isinstance(expected, (int, float)):
             return math.isclose(actual, expected, rel_tol=tolerance, abs_tol=tolerance)
-        if isinstance(actual, list) and isinstance(expected, list) and len(actual) == len(expected):
-            return all(_matches(left, right, comparison, tolerance) for left, right in zip(actual, expected))
-        if isinstance(actual, dict) and isinstance(expected, dict) and actual.keys() == expected.keys():
-            return all(_matches(actual[key], expected[key], comparison, tolerance) for key in actual)
+        if (
+            isinstance(actual, list)
+            and isinstance(expected, list)
+            and len(actual) == len(expected)
+        ):
+            return all(
+                _matches(left, right, comparison, tolerance)
+                for left, right in zip(actual, expected, strict=True)
+            )
+        if (
+            isinstance(actual, dict)
+            and isinstance(expected, dict)
+            and actual.keys() == expected.keys()
+        ):
+            return all(
+                _matches(actual[key], expected[key], comparison, tolerance)
+                for key in actual
+            )
     return actual == expected and type(actual) is type(expected)
 
 
@@ -127,7 +141,15 @@ def main() -> None:
         try:
             actual = _json_safe(function(*case["args"], **case["kwargs"]))
             passed = _matches(actual, expected, case["comparison"], case["tolerance"])
-            results.append({"order": position, "passed": passed, "actual": actual, "expected": expected, "duration_ms": round((time.perf_counter() - started) * 1000, 3)})
+            results.append(
+                {
+                    "order": position,
+                    "passed": passed,
+                    "actual": actual,
+                    "expected": expected,
+                    "duration_ms": round((time.perf_counter() - started) * 1000, 3),
+                }
+            )
         except Exception as exc:
             results.append(
                 {
@@ -141,7 +163,9 @@ def main() -> None:
             break
 
     passed_count = sum(item["passed"] for item in results)
-    passed = len(results) == len(payload["cases"]) and passed_count == len(payload["cases"])
+    passed = len(results) == len(payload["cases"]) and passed_count == len(
+        payload["cases"]
+    )
     _emit(
         {
             "ok": True,

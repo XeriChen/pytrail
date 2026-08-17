@@ -22,7 +22,7 @@ flowchart LR
 
 - `frontend/src/main.tsx`：应用壳、登录、课程目录、课程阅读器和顶层路由衔接。
 - `frontend/src/practice/`：独立题库、练习路由、CodeMirror 工作台和运行结果。
-- `frontend/src/markdown.tsx`：清洗后的 Markdown、代码高亮、图片路径、课时链接和 Mermaid。
+- `frontend/src/markdown.tsx`：清洗后的 Markdown、代码高亮、图片路径、课时链接、KaTeX 数学公式和 Mermaid。
 - `frontend/src/theme.ts`：系统偏好、持久化主题和 Mermaid 主题同步。
 - `frontend/src/api.ts`：统一 API 基础路径、JWT 请求头和错误转换。
 
@@ -93,19 +93,21 @@ erDiagram
 3. 选择课时后，`GET /api/lessons/{id}` 返回 Markdown、速测、资源基础 URL、内部课时链接和 `practice_count`。
 4. 前端使用 sanitized renderer 展示正文，并将已索引的 Markdown 课时链接转换为应用内导航。
 
+`GET /api/config` 只返回非敏感的部署能力标志（当前为 `userless_mode`），供静态前端决定是否展示用户功能。
+
 ### 练习场
 
 1. `GET /api/practice/exercises` 返回公开题库、筛选 facets 和可选登录进度。
 2. `GET /api/practice/exercises/{slug}` 返回题面、签名、官方模板、公开案例和可选 `progress.last_code`。
 3. 前端使用最近代码初始化编辑器；没有进度时使用官方模板。
-4. 登录用户调用 `POST /api/practice/exercises/{slug}/run`。
+4. 标准模式下登录用户调用 `POST /api/practice/exercises/{slug}/run`；无用户模式（`PYTRAIL_USERLESS_MODE=1`）允许匿名调用。
 5. API 校验请求并启动隔离子进程执行全部公开案例。
-6. 只有获得正常练习结果时才原子更新尝试次数、最近代码和状态。基础设施 `503` 不写进度。
+6. 标准模式只有获得正常练习结果时才原子更新尝试次数、最近代码和状态；无用户模式始终返回空进度并跳过写入。基础设施 `503` 不写进度。
 7. 已通过状态不会被后续失败运行降级。
 
 ### 身份认证
 
-注册和登录返回 7 天有效的 HS256 JWT。前端保存在 `localStorage.pytrail_token`，统一 API 客户端通过 Bearer header 发送。公开练习接口使用可选认证，因此登录用户能在相同响应中获得自己的进度。
+注册和登录返回 7 天有效的 HS256 JWT。前端保存在 `localStorage.pytrail_token`，统一 API 客户端通过 Bearer header 发送。公开练习接口使用可选认证，因此登录用户能在相同响应中获得自己的进度。无用户模式禁用注册、登录和用户详情接口，忽略旧 token，并关闭所有进度写入。
 
 注册与登录的邮箱会先 trim 再做小写归一化；姓名 trim 后不能为空；姓名、邮箱和密码都有长度上限，密码不 trim。并发重复注册依赖唯一约束返回 409，不产生 500。生产环境的 `SECRET_KEY` 必须是非已知默认值且长度至少 16 字符。
 
@@ -115,11 +117,11 @@ erDiagram
 
 ## 代码执行边界
 
-练习代码不在 API 进程中直接执行。主进程先进行 AST 和函数签名校验，再以 `python -I` 启动子进程，通过有大小限制的 UTF-8 JSON stdin/stdout 通信。
+练习代码不在 API 进程中直接执行。主进程先进行 AST 和函数签名校验，再以 `python -I` 启动子进程，通过有大小限制的 UTF-8 JSON stdin/stdout 通信。解释器默认与 API 相同；临时非 Docker 部署可用 `PYTRAIL_PRACTICE_PYTHON` 显式选择本机 Python，但不会因此移除其他限制。
 
 当前边界包括：
 
-- 登录要求和每个用户/IP 的速率限制；
+- 标准模式的登录要求、无用户模式的 IP 限流，以及两种模式共用的请求限制；
 - 12 KB 源码上限；
 - 96 KB 输入和输出协议上限；
 - 2 秒总超时；

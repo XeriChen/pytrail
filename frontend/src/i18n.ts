@@ -102,6 +102,9 @@ export const catalog = {
     'auth.switchToLogin': '已有账户？去登录',
     'auth.close': '关闭',
     'request.failed': '请求失败',
+    'config.failed': '部署配置加载失败，已回退到标准登录模式。',
+    'config.retry': '重试配置',
+    'mode.userless': '访客模式：无需登录，做题结果不会保存。',
     'catalog.eyebrow': '课程目录',
     'catalog.heading': '九条路径，一以贯之',
     'catalog.learn': '开始学习',
@@ -190,7 +193,8 @@ export const catalog = {
     'playground.running': 'Running',
     'playground.output': 'Run your code to see output here.',
     'playground.offline': 'Connect the API to run Python code.',
-    'playground.disabled': 'The playground is disabled. It is a local development feature and is not available in public deployments.',
+    'playground.disabled':
+      'The playground is disabled. It is a local development feature and is not available in public deployments.',
     'playground.shortcut': 'Ctrl + Enter',
     'exercise.label': 'Quick check',
     'exercise.placeholder': 'Type your answer',
@@ -218,6 +222,9 @@ export const catalog = {
     'auth.switchToLogin': 'Already have an account? Log in',
     'auth.close': 'Close',
     'request.failed': 'Request failed',
+    'config.failed': 'Deployment configuration could not load; standard sign-in mode is active.',
+    'config.retry': 'Retry configuration',
+    'mode.userless': 'Guest mode: no sign-in required; practice results are not saved.',
     'catalog.eyebrow': 'COURSE CATALOG',
     'catalog.heading': 'Nine paths through Python',
     'catalog.learn': 'Start learning',
@@ -305,7 +312,11 @@ export function greetingKeys(date = new Date()): {
 } {
   const hour = date.getHours()
   if (hour < 12) return { display: 'overview.morning', kicker: 'overview.morningKicker' }
-  if (hour < 18) return { display: 'overview.afternoon', kicker: 'overview.afternoonKicker' }
+  if (hour < 18)
+    return {
+      display: 'overview.afternoon',
+      kicker: 'overview.afternoonKicker',
+    }
   return { display: 'overview.evening', kicker: 'overview.eveningKicker' }
 }
 
@@ -322,42 +333,103 @@ const LEVEL_COPY: Record<string, { zh: string; en: string }> = {
   advanced: { zh: '高阶', en: 'Advanced' },
 }
 
-const COURSE_COPY: Record<string, { zh: { title: string; description: string }; en: { title: string; description: string } }> = {
+const COURSE_COPY: Record<
+  string,
+  {
+    zh: { title: string; description: string }
+    en: { title: string; description: string }
+  }
+> = {
   'python-foundations': {
-    zh: { title: 'Python 基础', description: '从语法、数据结构到面向对象，建立扎实的 Python 基础。' },
-    en: { title: 'Python Foundations', description: 'From syntax and data structures to OOP, build a solid Python foundation.' },
+    zh: {
+      title: 'Python 基础',
+      description: '从语法、数据结构到面向对象，建立扎实的 Python 基础。',
+    },
+    en: {
+      title: 'Python Foundations',
+      description: 'From syntax and data structures to OOP, build a solid Python foundation.',
+    },
   },
   'python-essentials': {
-    zh: { title: 'Python 实用工具', description: '掌握文件、办公文档、图像、通信与正则表达式处理。' },
-    en: { title: 'Python Essentials', description: 'Files, office documents, images, messaging, and regular expressions.' },
+    zh: {
+      title: 'Python 实用工具',
+      description: '掌握文件、办公文档、图像、通信与正则表达式处理。',
+    },
+    en: {
+      title: 'Python Essentials',
+      description: 'Files, office documents, images, messaging, and regular expressions.',
+    },
   },
   'python-language-and-linux': {
-    zh: { title: '语言进阶与 Linux', description: '进阶 Python、Web 前端基础与 Linux 操作系统。' },
-    en: { title: 'Language and Linux', description: 'Advanced Python, web front-end basics, and the Linux operating system.' },
+    zh: {
+      title: '语言进阶与 Linux',
+      description: '进阶 Python、Web 前端基础与 Linux 操作系统。',
+    },
+    en: {
+      title: 'Language and Linux',
+      description: 'Advanced Python, web front-end basics, and the Linux operating system.',
+    },
   },
   'databases-and-sql': {
-    zh: { title: '数据库与 SQL', description: '学习关系型数据库、SQL、MySQL 与数据仓库基础。' },
-    en: { title: 'Databases and SQL', description: 'Relational databases, SQL, MySQL, and data warehouse fundamentals.' },
+    zh: {
+      title: '数据库与 SQL',
+      description: '学习关系型数据库、SQL、MySQL 与数据仓库基础。',
+    },
+    en: {
+      title: 'Databases and SQL',
+      description: 'Relational databases, SQL, MySQL, and data warehouse fundamentals.',
+    },
   },
   'web-development-with-django': {
-    zh: { title: 'Django Web 开发', description: '用 Django 与 DRF 构建、测试并部署 Web 应用。' },
-    en: { title: 'Web Development with Django', description: 'Build, test, and deploy web applications with Django and DRF.' },
+    zh: {
+      title: 'Django Web 开发',
+      description: '用 Django 与 DRF 构建、测试并部署 Web 应用。',
+    },
+    en: {
+      title: 'Web Development with Django',
+      description: 'Build, test, and deploy web applications with Django and DRF.',
+    },
   },
   'web-scraping': {
-    zh: { title: '网络数据采集', description: '掌握网络请求、HTML 解析、并发、Selenium 与 Scrapy。' },
-    en: { title: 'Web Scraping', description: 'Network requests, HTML parsing, concurrency, Selenium, and Scrapy.' },
+    zh: {
+      title: '网络数据采集',
+      description: '掌握网络请求、HTML 解析、并发、Selenium 与 Scrapy。',
+    },
+    en: {
+      title: 'Web Scraping',
+      description: 'Network requests, HTML parsing, concurrency, Selenium, and Scrapy.',
+    },
   },
   'data-analysis': {
-    zh: { title: '数据分析', description: '使用 NumPy、pandas 与可视化工具开展数据分析。' },
-    en: { title: 'Data Analysis', description: 'Data analysis with NumPy, pandas, and visualization tools.' },
+    zh: {
+      title: '数据分析',
+      description: '使用 NumPy、pandas 与可视化工具开展数据分析。',
+    },
+    en: {
+      title: 'Data Analysis',
+      description: 'Data analysis with NumPy, pandas, and visualization tools.',
+    },
   },
   'machine-learning': {
-    zh: { title: '机器学习', description: '从经典算法到神经网络与自然语言处理。' },
-    en: { title: 'Machine Learning', description: 'From classic algorithms to neural networks and natural language processing.' },
+    zh: {
+      title: '机器学习',
+      description: '从经典算法到神经网络与自然语言处理。',
+    },
+    en: {
+      title: 'Machine Learning',
+      description: 'From classic algorithms to neural networks and natural language processing.',
+    },
   },
   'projects-and-production': {
-    zh: { title: '项目与生产实践', description: '团队协作、容器、性能、测试、部署与商业项目实践。' },
-    en: { title: 'Projects and Production', description: 'Teamwork, containers, performance, testing, deployment, and commercial projects.' },
+    zh: {
+      title: '项目与生产实践',
+      description: '团队协作、容器、性能、测试、部署与商业项目实践。',
+    },
+    en: {
+      title: 'Projects and Production',
+      description:
+        'Teamwork, containers, performance, testing, deployment, and commercial projects.',
+    },
   },
 }
 

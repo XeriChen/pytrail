@@ -19,7 +19,9 @@ function renderMarkdown(markdown: string): string {
 
 describe('sanitized markdown renderer', () => {
   it('keeps inline code inline and dispatches fenced code to the reader block', () => {
-    const html = renderMarkdown('Use `len(items)` here.\n\n```python\ndef size(items):\n    return len(items)\n```')
+    const html = renderMarkdown(
+      'Use `len(items)` here.\n\n```python\ndef size(items):\n    return len(items)\n```',
+    )
     expect(html).toContain('<code>len(items)</code>')
     expect(html).toContain('class="code-block"')
     expect(html).toContain('token keyword')
@@ -29,6 +31,22 @@ describe('sanitized markdown renderer', () => {
     const html = renderMarkdown('```mermaid\nflowchart LR\nA --> B\n```')
     expect(html).toContain('class="mermaid-diagram"')
     expect(html).not.toContain('data-language="plain"')
+  })
+
+  it('renders block and inline math through KaTeX', () => {
+    const html = renderMarkdown(
+      'Sample mean $\\bar{x}$:\n\n$$\n\\bar{x} = \\frac{\\sum_{i=1}^{n}x_{i}}{n}\n$$',
+    )
+    expect(html).toContain('class="katex"')
+    expect(html).toContain('class="katex-display"')
+    expect(html).not.toContain('$$')
+    expect(html).not.toContain('language-math')
+  })
+
+  it('sanitizes raw HTML mixed with math while keeping KaTeX output', () => {
+    const html = renderMarkdown('$a < b$ <script>alert(1)</script>')
+    expect(html).toContain('class="katex"')
+    expect(html).not.toContain('<script')
   })
 
   it('renders GFM tables and drops dangerous markup', () => {

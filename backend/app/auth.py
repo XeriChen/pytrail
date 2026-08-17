@@ -3,15 +3,18 @@ import hmac
 import os
 import sys
 import warnings
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
+
 from .database import get_db
 from .models import User
 
 DEFAULT_SECRET_KEY = "dev-only-change-me"
+USERLESS_MODE_ENV = "PYTRAIL_USERLESS_MODE"
 MIN_SECRET_KEY_LENGTH = 16
 KNOWN_INSECURE_SECRETS = frozenset(
     {
@@ -36,7 +39,11 @@ def is_insecure_secret(secret: str | None) -> bool:
 
 
 def resolve_environment(environment: str | None = None) -> str:
-    raw = environment if environment is not None else os.getenv("PYTRAIL_ENV", os.getenv("ENV", "development"))
+    raw = (
+        environment
+        if environment is not None
+        else os.getenv("PYTRAIL_ENV", os.getenv("ENV", "development"))
+    )
     return (raw or "development").strip().lower()
 
 
@@ -44,7 +51,15 @@ def is_production_environment(environment: str | None = None) -> bool:
     return resolve_environment(environment) in {"production", "prod"}
 
 
-def enforce_secret_key_policy(secret: str | None = None, environment: str | None = None) -> str:
+def is_userless_mode() -> bool:
+    """Return whether this deployment intentionally has no user accounts."""
+    value = os.getenv(USERLESS_MODE_ENV, "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
+
+def enforce_secret_key_policy(
+    secret: str | None = None, environment: str | None = None
+) -> str:
     """Refuse a known-default key in production; warn loudly in demo mode."""
     value = SECRET_KEY if secret is None else secret
     if not is_insecure_secret(value):
@@ -69,26 +84,38 @@ def hash_password(password: str) -> str:
 def verify_password(password: str, encoded: str) -> bool:
     try:
         salt_hex, digest_hex = encoded.split(":", 1)
-        digest = hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt_hex), 120_000)
+        digest = hashlib.pbkdf2_hmac(
+            "sha256", password.encode(), bytes.fromhex(salt_hex), 120_000
+        )
         return hmac.compare_digest(digest.hex(), digest_hex)
     except ValueError:
         return False
 
 
 def create_token(user_id: int) -> str:
-    expires = datetime.now(timezone.utc) + timedelta(days=7)
-    return jwt.encode({"sub": str(user_id), "exp": expires}, SECRET_KEY, algorithm=ALGORITHM)
+    expires = datetime.now(UTC) + timedelta(days=7)
+    return jwt.encode(
+        {"sub": str(user_id), "exp": expires}, SECRET_KEY, algorithm=ALGORITHM
+    )
 
 
-def _user_from_credentials(credentials: HTTPAuthorizationCredentials, db: Session) -> User:
+def _user_from_credentials(
+    credentials: HTTPAuthorizationCredentials, db: Session
+) -> User:
     try:
-        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(
+            credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM]
+        )
         user_id = int(payload.get("sub", ""))
-    except (JWTError, ValueError):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    except JWTError, ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        ) from None
     user = db.get(User, user_id)
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"
+        )
     return user
 
 
@@ -96,6 +123,8 @@ def optional_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     db: Session = Depends(get_db),
 ) -> User | None:
+    if is_userless_mode():
+        return None
     return _user_from_credentials(credentials, db) if credentials else None
 
 
@@ -104,5 +133,7 @@ def current_user(
     db: Session = Depends(get_db),
 ) -> User:
     if not credentials:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required"
+        )
     return _user_from_credentials(credentials, db)

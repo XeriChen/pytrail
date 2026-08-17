@@ -47,12 +47,43 @@ const CourseMarkdown = React.lazy(() =>
 )
 
 type Exercise = { id: number; prompt: string; starter_code: string }
-type CourseSummary = { id: number; slug: string; title: string; description: string; level: string; accent: string; lesson_count: number; total_duration: number }
-type LessonSummary = { id: number; title: string; order: number; duration: number; has_exercises: boolean; practice_count?: number }
+type CourseSummary = {
+  id: number
+  slug: string
+  title: string
+  description: string
+  level: string
+  accent: string
+  lesson_count: number
+  total_duration: number
+}
+type LessonSummary = {
+  id: number
+  title: string
+  order: number
+  duration: number
+  has_exercises: boolean
+  practice_count?: number
+}
 type CourseDetail = CourseSummary & { lessons: LessonSummary[] }
-type LessonDetail = LessonSummary & { course_id: number; course_slug: string; markdown: string; exercises: Exercise[]; asset_base_url: string; lesson_links: Record<string, number> }
+type LessonDetail = LessonSummary & {
+  course_id: number
+  course_slug: string
+  markdown: string
+  exercises: Exercise[]
+  asset_base_url: string
+  lesson_links: Record<string, number>
+}
 type User = { id: number; name: string; email: string }
-type Dashboard = { lessons_total: number; lessons_completed: number; completion: number; average_score: number; streak: number }
+type Dashboard = {
+  lessons_total: number
+  lessons_completed: number
+  completion: number
+  average_score: number
+  streak: number
+}
+type DeploymentConfig = { userless_mode: boolean }
+type DeploymentMode = 'loading' | 'standard' | 'userless' | 'error'
 type Tab = 'overview' | 'course' | 'practice'
 type LoadState = 'idle' | 'loading' | 'success' | 'error' | 'empty'
 
@@ -134,7 +165,11 @@ function TrailCanvas({ pointer, theme }: { pointer: Vec; theme: Theme }) {
 }
 
 export function App() {
-  return <BrowserRouter><AppShell /></BrowserRouter>
+  return (
+    <BrowserRouter>
+      <AppShell />
+    </BrowserRouter>
+  )
 }
 
 function AppShell() {
@@ -142,9 +177,19 @@ function AppShell() {
   const location = useLocation()
   const navigate = useNavigate()
   const practiceRoute = location.pathname.startsWith('/practice')
-  const [locale, setLocaleState] = useState<Locale>(() => readLocale(typeof localStorage === 'undefined' ? null : localStorage))
+  const [locale, setLocaleState] = useState<Locale>(() =>
+    readLocale(typeof localStorage === 'undefined' ? null : localStorage),
+  )
   const [user, setUser] = useState<User | null>(null)
-  const [dashboard, setDashboard] = useState<Dashboard>({ lessons_total: 0, lessons_completed: 0, completion: 0, average_score: 0, streak: 0 })
+  const [deploymentMode, setDeploymentMode] = useState<DeploymentMode>('loading')
+  const [configRequestKey, setConfigRequestKey] = useState(0)
+  const [dashboard, setDashboard] = useState<Dashboard>({
+    lessons_total: 0,
+    lessons_completed: 0,
+    completion: 0,
+    average_score: 0,
+    streak: 0,
+  })
   const [tab, setTab] = useState<Tab>('overview')
   const [authOpen, setAuthOpen] = useState(false)
   const [mobileNav, setMobileNav] = useState(false)
@@ -166,6 +211,8 @@ function AppShell() {
   const selectedCourseRef = useRef<CourseDetail | null>(null)
 
   const failed = t(locale, 'request.failed')
+  const userlessMode = deploymentMode === 'userless'
+  const deploymentReady = deploymentMode !== 'loading'
 
   const setLocale = (next: Locale) => {
     setLocaleState(next)
@@ -227,16 +274,46 @@ function AppShell() {
   }
 
   useEffect(() => {
+    const controller = new AbortController()
+    setDeploymentMode('loading')
+    request<DeploymentConfig>('/config', {}, failed, controller.signal)
+      .then((config) => {
+        setDeploymentMode(config.userless_mode ? 'userless' : 'standard')
+        if (config.userless_mode) {
+          localStorage.removeItem('pytrail_token')
+          setUser(null)
+          setAuthOpen(false)
+        }
+      })
+      .catch((error) => {
+        if (error.name !== 'AbortError') {
+          setDeploymentMode('error')
+        }
+      })
+    return () => controller.abort()
+    // The deployment mode is read once per retry; locale only changes copy.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [configRequestKey])
+
+  useEffect(() => {
+    if (deploymentMode === 'loading') return
+    if (deploymentMode === 'userless') {
+      localStorage.removeItem('pytrail_token')
+      setUser(null)
+      return
+    }
     if (localStorage.getItem('pytrail_token')) {
       request<User>('/auth/me', {}, failed)
         .then((u) => {
           setUser(u)
-          request<Dashboard>('/dashboard', {}, failed).then(setDashboard).catch(() => {})
+          request<Dashboard>('/dashboard', {}, failed)
+            .then(setDashboard)
+            .catch(() => {})
         })
         .catch(() => localStorage.removeItem('pytrail_token'))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [deploymentMode])
 
   useEffect(() => {
     if (!practiceRoute && catalogState === 'idle') loadCourses()
@@ -278,16 +355,30 @@ function AppShell() {
   const signOut = () => {
     localStorage.removeItem('pytrail_token')
     setUser(null)
-    setDashboard({ lessons_total: 0, lessons_completed: 0, completion: 0, average_score: 0, streak: 0 })
+    setDashboard({
+      lessons_total: 0,
+      lessons_completed: 0,
+      completion: 0,
+      average_score: 0,
+      streak: 0,
+    })
   }
 
   const refreshDashboard = () => {
-    request<Dashboard>('/dashboard', {}, failed).then(setDashboard).catch(() => {})
+    request<Dashboard>('/dashboard', {}, failed)
+      .then(setDashboard)
+      .catch(() => {})
   }
 
   const activeTab: Tab = practiceRoute ? 'practice' : tab
   const crumb =
-    activeTab === 'overview' ? tx('crumb.overview') : activeTab === 'course' ? (selectedCourse ? localizeCourse(locale, selectedCourse).title : tx('course.fallbackTitle')) : tx('crumb.practice')
+    activeTab === 'overview'
+      ? tx('crumb.overview')
+      : activeTab === 'course'
+        ? selectedCourse
+          ? localizeCourse(locale, selectedCourse).title
+          : tx('course.fallbackTitle')
+        : tx('crumb.practice')
 
   return (
     <I18nContext.Provider value={{ locale, setLocale, tx }}>
@@ -295,6 +386,7 @@ function AppShell() {
         className="stage"
         data-locale={locale}
         data-view={activeTab}
+        data-deployment-notice={userlessMode || deploymentMode === 'error' ? 'true' : 'false'}
         onMouseMove={(e) => setPointer({ x: e.clientX, y: e.clientY })}
       >
         <TrailCanvas pointer={pointer} theme={theme} />
@@ -309,9 +401,39 @@ function AppShell() {
             <span className="brand-sub">{tx('brand.sub')}</span>
           </div>
           <nav className="spine-nav">
-            <NavBtn active={activeTab === 'overview'} index="01" icon={<Home size={16} />} label={tx('nav.overview')} testId="nav-overview" onClick={() => { navigate('/'); setTab('overview'); setMobileNav(false) }} />
-            <NavBtn active={activeTab === 'course'} index="02" icon={<BookOpen size={16} />} label={tx('nav.course')} testId="nav-course" onClick={() => { navigate('/'); setTab('course'); setMobileNav(false) }} />
-            <NavBtn active={activeTab === 'practice'} index="03" icon={<Code2 size={16} />} label={tx('nav.practice')} testId="nav-practice" pill={tx('nav.new')} onClick={openPractice} />
+            <NavBtn
+              active={activeTab === 'overview'}
+              index="01"
+              icon={<Home size={16} />}
+              label={tx('nav.overview')}
+              testId="nav-overview"
+              onClick={() => {
+                navigate('/')
+                setTab('overview')
+                setMobileNav(false)
+              }}
+            />
+            <NavBtn
+              active={activeTab === 'course'}
+              index="02"
+              icon={<BookOpen size={16} />}
+              label={tx('nav.course')}
+              testId="nav-course"
+              onClick={() => {
+                navigate('/')
+                setTab('course')
+                setMobileNav(false)
+              }}
+            />
+            <NavBtn
+              active={activeTab === 'practice'}
+              index="03"
+              icon={<Code2 size={16} />}
+              label={tx('nav.practice')}
+              testId="nav-practice"
+              pill={tx('nav.new')}
+              onClick={openPractice}
+            />
           </nav>
           <div className="spine-foot">
             <LangSwitch />
@@ -319,21 +441,38 @@ function AppShell() {
             <button className="ghost-btn" type="button">
               <Settings size={16} /> {tx('nav.settings')}
             </button>
-            {user ? (
-              <button className="ghost-btn" type="button" onClick={signOut}>
-                <LogOut size={16} /> {tx('nav.signOut')}
-              </button>
-            ) : (
-              <button className="ghost-btn" type="button" data-testid="nav-signin" onClick={() => setAuthOpen(true)}>
-                <LogIn size={16} /> {tx('nav.signIn')}
-              </button>
-            )}
+            {!userlessMode &&
+              deploymentReady &&
+              (user ? (
+                <button className="ghost-btn" type="button" onClick={signOut}>
+                  <LogOut size={16} /> {tx('nav.signOut')}
+                </button>
+              ) : (
+                <button
+                  className="ghost-btn"
+                  type="button"
+                  data-testid="nav-signin"
+                  onClick={() => setAuthOpen(true)}
+                >
+                  <LogIn size={16} /> {tx('nav.signIn')}
+                </button>
+              ))}
           </div>
         </aside>
-        {mobileNav && <button className="scrim" aria-label={tx('nav.close')} onClick={() => setMobileNav(false)} />}
+        {mobileNav && (
+          <button
+            className="scrim"
+            aria-label={tx('nav.close')}
+            onClick={() => setMobileNav(false)}
+          />
+        )}
         <main className="orbit">
           <header className="mast">
-            <button className="icon-btn mobile-menu" aria-label={tx('nav.open')} onClick={() => setMobileNav(true)}>
+            <button
+              className="icon-btn mobile-menu"
+              aria-label={tx('nav.open')}
+              onClick={() => setMobileNav(true)}
+            >
               <Menu size={20} />
             </button>
             <div className="crumb">
@@ -342,25 +481,47 @@ function AppShell() {
               <strong>{crumb}</strong>
             </div>
             <div className="mast-actions">
-              <span className="streak">
-                <Flame size={16} /> {tx('top.streak', { n: dashboard.streak })}
-              </span>
-              {user ? (
-                <div className="avatar" title={user.email}>
-                  {user.name.slice(0, 1).toUpperCase()}
-                </div>
-              ) : (
-                <button className="text-btn" type="button" onClick={() => setAuthOpen(true)}>
-                  {tx('top.logIn')}
-                </button>
+              {!userlessMode && (
+                <span className="streak">
+                  <Flame size={16} /> {tx('top.streak', { n: dashboard.streak })}
+                </span>
               )}
+              {!userlessMode &&
+                deploymentReady &&
+                (user ? (
+                  <div className="avatar" title={user.email}>
+                    {user.name.slice(0, 1).toUpperCase()}
+                  </div>
+                ) : (
+                  <button className="text-btn" type="button" onClick={() => setAuthOpen(true)}>
+                    {tx('top.logIn')}
+                  </button>
+                ))}
             </div>
           </header>
+          {deploymentMode === 'error' && (
+            <div className="deployment-notice config-warning" role="alert">
+              <span>{tx('config.failed')}</span>
+              <button
+                className="link-btn"
+                type="button"
+                onClick={() => setConfigRequestKey((value) => value + 1)}
+              >
+                {tx('config.retry')}
+              </button>
+            </div>
+          )}
+          {userlessMode && (
+            <div className="deployment-notice" role="status">
+              {tx('mode.userless')}
+            </div>
+          )}
           {!practiceRoute && tab === 'overview' && (
             <Overview
               courses={courses}
               catalogState={catalogState}
               dashboard={dashboard}
+              userlessMode={userlessMode}
               openCourse={openCourse}
               onRetry={loadCourses}
               pointer={pointer}
@@ -381,15 +542,38 @@ function AppShell() {
               onRetryCourse={() => courseTargetId != null && loadCourse(courseTargetId)}
               onRetryLesson={() => lessonTargetId != null && loadLesson(lessonTargetId)}
               user={user}
+              userlessMode={userlessMode}
+              authReady={deploymentReady}
               onAuth={() => setAuthOpen(true)}
               onSubmitted={refreshDashboard}
               completion={dashboard.completion}
               theme={theme}
             />
           )}
-          {practiceRoute && <div data-surface="practice"><PracticeRoutes locale={locale} theme={theme} authenticated={Boolean(user)} userId={user?.id ?? null} onAuth={() => setAuthOpen(true)} onOpenLesson={(lessonId) => openLesson({ id: lessonId, title: '', order: 0, duration: 0, has_exercises: false })} /></div>}
+          {practiceRoute && (
+            <div data-surface="practice">
+              <PracticeRoutes
+                locale={locale}
+                theme={theme}
+                authenticated={Boolean(user)}
+                anonymousMode={userlessMode}
+                authReady={deploymentReady}
+                userId={user?.id ?? null}
+                onAuth={() => setAuthOpen(true)}
+                onOpenLesson={(lessonId) =>
+                  openLesson({
+                    id: lessonId,
+                    title: '',
+                    order: 0,
+                    duration: 0,
+                    has_exercises: false,
+                  })
+                }
+              />
+            </div>
+          )}
         </main>
-        {authOpen && (
+        {authOpen && deploymentReady && !userlessMode && (
           <AuthModal
             onClose={() => setAuthOpen(false)}
             onAuth={(u, token) => {
@@ -425,7 +609,12 @@ function NavBtn({
   onClick: () => void
 }) {
   return (
-    <button className={active ? 'nav-item active' : 'nav-item'} data-testid={testId} type="button" onClick={onClick}>
+    <button
+      className={active ? 'nav-item active' : 'nav-item'}
+      data-testid={testId}
+      type="button"
+      onClick={onClick}
+    >
       <span className="nav-index">{index}</span>
       {icon}
       <span>{label}</span>
@@ -438,12 +627,27 @@ function NavBtn({
 function LangSwitch() {
   const { locale, setLocale, tx } = useI18n()
   return (
-    <div className="lang-switch" data-testid="lang-control" role="group" aria-label={tx('lang.label')}>
+    <div
+      className="lang-switch"
+      data-testid="lang-control"
+      role="group"
+      aria-label={tx('lang.label')}
+    >
       <Languages size={15} />
-      <button type="button" data-testid="lang-zh" className={locale === 'zh' ? 'on' : ''} onClick={() => setLocale('zh')}>
+      <button
+        type="button"
+        data-testid="lang-zh"
+        className={locale === 'zh' ? 'on' : ''}
+        onClick={() => setLocale('zh')}
+      >
         {tx('lang.zh')}
       </button>
-      <button type="button" data-testid="lang-en" className={locale === 'en' ? 'on' : ''} onClick={() => setLocale('en')}>
+      <button
+        type="button"
+        data-testid="lang-en"
+        className={locale === 'en' ? 'on' : ''}
+        onClick={() => setLocale('en')}
+      >
         {tx('lang.en')}
       </button>
     </div>
@@ -475,6 +679,7 @@ function Overview({
   openCourse,
   onRetry,
   pointer,
+  userlessMode,
 }: {
   courses: CourseSummary[]
   catalogState: LoadState
@@ -482,10 +687,14 @@ function Overview({
   openCourse: (course: CourseSummary) => void
   onRetry: () => void
   pointer: Vec
+  userlessMode: boolean
 }) {
   const { locale, tx } = useI18n()
   const greet = greetingKeys()
-  const localized = useMemo(() => courses.map((course) => localizeCourse(locale, course)), [courses, locale])
+  const localized = useMemo(
+    () => courses.map((course) => localizeCourse(locale, course)),
+    [courses, locale],
+  )
   return (
     <div className="page overview-page" data-surface="overview">
       <section className="hero">
@@ -496,15 +705,45 @@ function Overview({
           <i className="display-dot" />
         </h1>
         <p className="lede">{tx('overview.tagline')}</p>
-        <button className="primary-btn" type="button" onClick={() => courses[0] && openCourse(courses[0])}>
+        <button
+          className="primary-btn"
+          type="button"
+          onClick={() => courses[0] && openCourse(courses[0])}
+        >
           <CirclePlay size={18} /> {tx('overview.continue')}
         </button>
       </section>
-      <section className="stats-grid">
-        <Stat label={tx('stats.progress')} value={`${dashboard.completion}%`} detail={tx('stats.progressDetail', { completed: dashboard.lessons_completed, total: dashboard.lessons_total })} icon={<BookOpen />} tone="cinnabar" pointer={pointer} />
-        <Stat label={tx('stats.score')} value={`${dashboard.average_score || 0}%`} detail={tx('stats.scoreDetail')} icon={<Trophy />} tone="gold" pointer={pointer} />
-        <Stat label={tx('stats.streak')} value={tx('stats.streakValue', { n: dashboard.streak })} detail={tx('stats.streakBest')} icon={<Flame />} tone="jade" pointer={pointer} />
-      </section>
+      {!userlessMode && (
+        <section className="stats-grid">
+          <Stat
+            label={tx('stats.progress')}
+            value={`${dashboard.completion}%`}
+            detail={tx('stats.progressDetail', {
+              completed: dashboard.lessons_completed,
+              total: dashboard.lessons_total,
+            })}
+            icon={<BookOpen />}
+            tone="cinnabar"
+            pointer={pointer}
+          />
+          <Stat
+            label={tx('stats.score')}
+            value={`${dashboard.average_score || 0}%`}
+            detail={tx('stats.scoreDetail')}
+            icon={<Trophy />}
+            tone="gold"
+            pointer={pointer}
+          />
+          <Stat
+            label={tx('stats.streak')}
+            value={tx('stats.streakValue', { n: dashboard.streak })}
+            detail={tx('stats.streakBest')}
+            icon={<Flame />}
+            tone="jade"
+            pointer={pointer}
+          />
+        </section>
+      )}
       <section className="section-heading">
         <div>
           <p className="eyebrow">{tx('catalog.eyebrow')}</p>
@@ -572,7 +811,11 @@ function Stat({
     setTilt(next)
   }, [pointer])
   return (
-    <div ref={ref} className="stat-card" style={{ transform: `rotateX(${tilt.rx}deg) rotateY(${tilt.ry}deg)` }}>
+    <div
+      ref={ref}
+      className="stat-card"
+      style={{ transform: `rotateX(${tilt.rx}deg) rotateY(${tilt.ry}deg)` }}
+    >
       <div className={`stat-icon ${tone}`}>{icon}</div>
       <div>
         <p>{label}</p>
@@ -597,6 +840,8 @@ function CourseView({
   onRetryCourse,
   onRetryLesson,
   user,
+  userlessMode,
+  authReady,
   onAuth,
   onSubmitted,
   completion,
@@ -615,6 +860,8 @@ function CourseView({
   onRetryCourse: () => void
   onRetryLesson: () => void
   user: User | null
+  userlessMode: boolean
+  authReady: boolean
   onAuth: () => void
   onSubmitted: () => void
   completion: number
@@ -625,7 +872,8 @@ function CourseView({
   const lessons = course?.lessons ?? []
   const currentIndex = lesson ? lessons.findIndex((item) => item.id === lesson.id) : -1
   const prev = currentIndex > 0 ? lessons[currentIndex - 1] : null
-  const next = currentIndex >= 0 && currentIndex < lessons.length - 1 ? lessons[currentIndex + 1] : null
+  const next =
+    currentIndex >= 0 && currentIndex < lessons.length - 1 ? lessons[currentIndex + 1] : null
   return (
     <div className="page course-page" data-surface="course">
       <div className="course-header">
@@ -656,10 +904,12 @@ function CourseView({
               ))}
             </select>
           </label>
-          <div className="course-progress-chip">
-            <strong>{completion}%</strong>
-            <span>{tx('course.complete')}</span>
-          </div>
+          {!userlessMode && (
+            <div className="course-progress-chip">
+              <strong>{completion}%</strong>
+              <span>{tx('course.complete')}</span>
+            </div>
+          )}
         </div>
       </div>
       {courseState === 'loading' && <StatePanel kind="loading" />}
@@ -669,8 +919,13 @@ function CourseView({
         <div className="course-layout">
           <aside className="lesson-sidebar">
             <p className="eyebrow">{tx('course.chapters')}</p>
-            {lessons.map((item, idx) => (
-              <button key={item.id} className={`lesson-nav ${lesson?.id === item.id ? 'selected' : ''}`} type="button" onClick={() => openLesson(item)}>
+            {lessons.map((item) => (
+              <button
+                key={item.id}
+                className={`lesson-nav ${lesson?.id === item.id ? 'selected' : ''}`}
+                type="button"
+                onClick={() => openLesson(item)}
+              >
                 <span>{String(item.order).padStart(2, '0')}</span>
                 <span>
                   {item.title}
@@ -684,7 +939,12 @@ function CourseView({
             {lessonState === 'error' && <StatePanel kind="error" onRetry={onRetryLesson} />}
             {lessonState === 'success' && lesson && (
               <>
-                <div className="lesson-kicker">{tx('course.lessonMeta', { n: lesson.order, duration: lesson.duration })}</div>
+                <div className="lesson-kicker">
+                  {tx('course.lessonMeta', {
+                    n: lesson.order,
+                    duration: lesson.duration,
+                  })}
+                </div>
                 <h2>{lesson.title}</h2>
                 <React.Suspense fallback={<StatePanel kind="loading" />}>
                   <CourseMarkdown
@@ -708,25 +968,44 @@ function CourseView({
                       copiedCode: tx('code.copied'),
                     }}
                   />
-                 </React.Suspense>
-                 {Boolean(lesson.practice_count) && (
-                   <button className="lesson-practice-link" type="button" onClick={() => onPractice(lesson.id)}>
-                     <Code2 size={17} />
-                     <span>{tx('practice.related', { n: lesson.practice_count || 0 })}</span>
-                     <ChevronRight size={16} />
-                   </button>
-                 )}
-                 <CodeRunner key={lesson.id} initial={lesson.exercises[0]?.starter_code || 'print("Hello, Python!")'} />
+                </React.Suspense>
+                {Boolean(lesson.practice_count) && (
+                  <button
+                    className="lesson-practice-link"
+                    type="button"
+                    onClick={() => onPractice(lesson.id)}
+                  >
+                    <Code2 size={17} />
+                    <span>
+                      {tx('practice.related', {
+                        n: lesson.practice_count || 0,
+                      })}
+                    </span>
+                    <ChevronRight size={16} />
+                  </button>
+                )}
+                <CodeRunner
+                  key={lesson.id}
+                  initial={lesson.exercises[0]?.starter_code || 'print("Hello, Python!")'}
+                />
                 {lesson.exercises.length > 0 ? (
                   lesson.exercises.map((exercise) => (
-                    <ExerciseCard key={exercise.id} exercise={exercise} user={user} onAuth={onAuth} onSubmitted={onSubmitted} />
+                    <ExerciseCard
+                      key={exercise.id}
+                      exercise={exercise}
+                      user={user}
+                      anonymousMode={userlessMode}
+                      authReady={authReady}
+                      onAuth={onAuth}
+                      onSubmitted={onSubmitted}
+                    />
                   ))
                 ) : (
                   <div className="exercise-none">
                     <Code2 size={16} /> <span>{tx('exercise.none')}</span>
                   </div>
                 )}
-                {!user && (
+                {!user && !userlessMode && (
                   <div className="signin-note">
                     <Globe size={17} />
                     <span>{tx('signin.note')}</span>
@@ -736,10 +1015,20 @@ function CourseView({
                   </div>
                 )}
                 <div className="lesson-nav-actions">
-                  <button className="secondary-btn" type="button" disabled={!prev} onClick={() => prev && openLesson(prev)}>
+                  <button
+                    className="secondary-btn"
+                    type="button"
+                    disabled={!prev}
+                    onClick={() => prev && openLesson(prev)}
+                  >
                     <ArrowLeft size={15} /> {tx('lesson.prev')}
                   </button>
-                  <button className="secondary-btn" type="button" disabled={!next} onClick={() => next && openLesson(next)}>
+                  <button
+                    className="secondary-btn"
+                    type="button"
+                    disabled={!next}
+                    onClick={() => next && openLesson(next)}
+                  >
                     {tx('lesson.next')} <ArrowRight size={15} />
                   </button>
                 </div>
@@ -752,13 +1041,32 @@ function CourseView({
   )
 }
 
-function StatePanel({ kind, onRetry }: { kind: 'loading' | 'error' | 'empty'; onRetry?: () => void }) {
+function StatePanel({
+  kind,
+  onRetry,
+}: {
+  kind: 'loading' | 'error' | 'empty'
+  onRetry?: () => void
+}) {
   const { tx } = useI18n()
-  const icon = kind === 'loading' ? <RotateCcw size={22} className="spin" /> : kind === 'error' ? <X size={22} /> : <BookOpen size={22} />
+  const icon =
+    kind === 'loading' ? (
+      <RotateCcw size={22} className="spin" />
+    ) : kind === 'error' ? (
+      <X size={22} />
+    ) : (
+      <BookOpen size={22} />
+    )
   return (
     <div className={`state-panel ${kind}`} data-testid={`state-${kind}`}>
       {icon}
-      <p>{kind === 'loading' ? tx('state.loading') : kind === 'error' ? tx('state.failure') : tx('state.empty')}</p>
+      <p>
+        {kind === 'loading'
+          ? tx('state.loading')
+          : kind === 'error'
+            ? tx('state.failure')
+            : tx('state.empty')}
+      </p>
       {kind === 'error' && onRetry && (
         <button className="secondary-btn" type="button" onClick={onRetry}>
           <RotateCcw size={14} /> {tx('state.retry')}
@@ -779,10 +1087,18 @@ function CodeRunner({ initial }: { initial: string }) {
   const run = async () => {
     setRunning(true)
     try {
-      const result = await request<{ stdout: string; stderr: string; ok: boolean }>('/execute', { method: 'POST', body: JSON.stringify({ code }) }, tx('request.failed'))
+      const result = await request<{
+        stdout: string
+        stderr: string
+        ok: boolean
+      }>('/execute', { method: 'POST', body: JSON.stringify({ code }) }, tx('request.failed'))
       setOutput(result.stdout || result.stderr || tx('playground.output'))
     } catch (err) {
-      setOutput(err instanceof ApiError && err.status === 404 ? tx('playground.disabled') : (err as Error).message || tx('playground.offline'))
+      setOutput(
+        err instanceof ApiError && err.status === 404
+          ? tx('playground.disabled')
+          : (err as Error).message || tx('playground.offline'),
+      )
     } finally {
       setRunning(false)
     }
@@ -795,7 +1111,12 @@ function CodeRunner({ initial }: { initial: string }) {
         </div>
         <span>{tx('playground.lang')}</span>
       </div>
-      <textarea value={code} onChange={(e) => setCode(e.target.value)} spellCheck={false} aria-label={tx('playground.title')} />
+      <textarea
+        value={code}
+        onChange={(e) => setCode(e.target.value)}
+        spellCheck={false}
+        aria-label={tx('playground.title')}
+      />
       <div className="runner-foot">
         <button className="run-btn" type="button" onClick={run} disabled={running}>
           <Play size={14} /> {running ? tx('playground.running') : tx('playground.run')}
@@ -810,31 +1131,43 @@ function CodeRunner({ initial }: { initial: string }) {
 function ExerciseCard({
   exercise,
   user,
+  anonymousMode,
+  authReady,
   onAuth,
   onSubmitted,
 }: {
   exercise: Exercise
   user: User | null
+  anonymousMode: boolean
+  authReady: boolean
   onAuth: () => void
   onSubmitted: () => void
 }) {
   const { tx } = useI18n()
   const [answer, setAnswer] = useState('')
-  const [result, setResult] = useState<{ correct: boolean; message: string } | null>(null)
+  const [result, setResult] = useState<{
+    correct: boolean
+    message: string
+  } | null>(null)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const submitId = useRef(0)
   const submit = async () => {
-    if (!user) return onAuth()
+    if (!authReady) return
+    if (!user && !anonymousMode) return onAuth()
     const current = ++submitId.current
     setSubmitting(true)
     setError('')
     setResult(null)
     try {
-      const data = await request<{ correct: boolean; message: string }>(`/exercises/${exercise.id}/submit`, { method: 'POST', body: JSON.stringify({ answer }) }, tx('request.failed'))
+      const data = await request<{ correct: boolean; message: string }>(
+        `/exercises/${exercise.id}/submit`,
+        { method: 'POST', body: JSON.stringify({ answer }) },
+        tx('request.failed'),
+      )
       if (submitId.current !== current) return
       setResult(data)
-      onSubmitted()
+      if (user) onSubmitted()
     } catch (err) {
       if (submitId.current !== current) return
       setError((err as Error).message || tx('request.failed'))
@@ -849,8 +1182,17 @@ function ExerciseCard({
       </div>
       <h3>{exercise.prompt}</h3>
       <div className="answer-row">
-        <input value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder={tx('exercise.placeholder')} />
-        <button className="secondary-btn" type="button" onClick={submit} disabled={submitting}>
+        <input
+          value={answer}
+          onChange={(e) => setAnswer(e.target.value)}
+          placeholder={tx('exercise.placeholder')}
+        />
+        <button
+          className="secondary-btn"
+          type="button"
+          onClick={submit}
+          disabled={submitting || !authReady}
+        >
           {submitting ? tx('state.loading') : tx('exercise.check')}
         </button>
       </div>
@@ -860,7 +1202,13 @@ function ExerciseCard({
   )
 }
 
-function AuthModal({ onClose, onAuth }: { onClose: () => void; onAuth: (user: User, token: string) => void }) {
+function AuthModal({
+  onClose,
+  onAuth,
+}: {
+  onClose: () => void
+  onAuth: (user: User, token: string) => void
+}) {
   const { tx } = useI18n()
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [name, setName] = useState('')
@@ -873,7 +1221,10 @@ function AuthModal({ onClose, onAuth }: { onClose: () => void; onAuth: (user: Us
     try {
       const data = await request<{ user: User; access_token: string }>(
         `/auth/${mode}`,
-        { method: 'POST', body: JSON.stringify(mode === 'login' ? { email, password } : { name, email, password }) },
+        {
+          method: 'POST',
+          body: JSON.stringify(mode === 'login' ? { email, password } : { name, email, password }),
+        },
         tx('request.failed'),
       )
       onAuth(data.user, data.access_token)
@@ -887,7 +1238,12 @@ function AuthModal({ onClose, onAuth }: { onClose: () => void; onAuth: (user: Us
         {mode === 'login' ? tx('auth.welcome') : tx('auth.start')}
       </div>
       <div className="auth-modal">
-        <button className="icon-btn close-btn" type="button" aria-label={tx('auth.close')} onClick={onClose}>
+        <button
+          className="icon-btn close-btn"
+          type="button"
+          aria-label={tx('auth.close')}
+          onClick={onClose}
+        >
           <X size={19} />
         </button>
         <div className="brand-stack modal-brand">
@@ -897,15 +1253,45 @@ function AuthModal({ onClose, onAuth }: { onClose: () => void; onAuth: (user: Us
         <h2>{mode === 'login' ? tx('auth.welcome') : tx('auth.start')}</h2>
         <p className="lede">{mode === 'login' ? tx('auth.continue') : tx('auth.createHint')}</p>
         <form onSubmit={submit}>
-          {mode === 'register' && <input name="name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} placeholder={tx('auth.name')} required />}
-          <input name="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={tx('auth.email')} required />
-          <input name="password" type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder={tx('auth.password')} required minLength={8} />
+          {mode === 'register' && (
+            <input
+              name="name"
+              autoComplete="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={tx('auth.name')}
+              required
+            />
+          )}
+          <input
+            name="email"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder={tx('auth.email')}
+            required
+          />
+          <input
+            name="password"
+            type="password"
+            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder={tx('auth.password')}
+            required
+            minLength={8}
+          />
           {error && <p className="error">{error}</p>}
           <button className="primary-btn full" type="submit">
             {mode === 'login' ? tx('auth.login') : tx('auth.register')} <ChevronRight size={17} />
           </button>
         </form>
-        <button className="switch-auth" type="button" onClick={() => setMode(mode === 'login' ? 'register' : 'login')}>
+        <button
+          className="switch-auth"
+          type="button"
+          onClick={() => setMode(mode === 'login' ? 'register' : 'login')}
+        >
           {mode === 'login' ? tx('auth.switchToRegister') : tx('auth.switchToLogin')}
         </button>
       </div>

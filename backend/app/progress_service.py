@@ -18,7 +18,9 @@ def _insert(dialect: str):
     raise RuntimeError(f"Unsupported database dialect for lesson progress: {dialect}")
 
 
-def build_progress_upsert(dialect: str, *, user_id: int, lesson_id: int, completed: bool, score: int):
+def build_progress_upsert(
+    dialect: str, *, user_id: int, lesson_id: int, completed: bool, score: int
+):
     statement = _insert(dialect)
     statement = statement.values(
         user_id=user_id,

@@ -190,6 +190,8 @@ body.practice-editor-fullscreen .spine { visibility: hidden; }
 }
 
 @media (max-width: 760px) {
+  .stage[data-deployment-notice='true'] .practice-workspace,
+  .stage[data-deployment-notice='true'] .workspace-state { height: calc(100dvh - 107px); }
   .practice-catalog-page { width: min(100% - 28px, 680px); padding: 32px 0 54px; }
   .practice-catalog-head { align-items: start; }
   .practice-catalog-head h1 { font-size: 38px; }
@@ -214,6 +216,7 @@ body.practice-editor-fullscreen .spine { visibility: hidden; }
   .workspace-code,
   .workspace-results { display: none; height: 100%; border: 0; }
   .workspace-statement.mobile-active { display: block; padding: 28px 20px 60px; }
+  .function-contract code { overflow-wrap: anywhere; white-space: pre-wrap; }
   .workspace-code.mobile-active { display: grid; }
   .workspace-results.mobile-active { display: block; }
 }

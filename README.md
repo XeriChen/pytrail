@@ -6,7 +6,7 @@ PyTrail 是一个面向 Python 学习路径的全栈应用。它将 9 门课程�
 
 ## 核心能力
 
-- 课程目录与按需阅读，支持 Markdown、GFM 表格、本地资源、语法高亮和 Mermaid。
+- 课程目录与按需阅读，支持 Markdown、GFM 表格、本地资源、语法高亮、KaTeX 数学公式和 Mermaid。
 - 明暗主题、响应式布局、移动端阅读与练习工作台。
 - 独立练习场：`/practice` 题库和 `/practice/:slug` 双栏工作台。
 - 36 道函数题精确关联课程章节，支持课程、课时、难度、标签和进度筛选。
@@ -18,7 +18,7 @@ PyTrail 是一个面向 Python 学习路径的全栈应用。它将 9 门课程�
 | 层 | 技术 |
 | --- | --- |
 | 前端 | React 19、TypeScript 7、Vite 8、React Router、CodeMirror 6 |
-| 内容渲染 | React Markdown、rehype-sanitize、Prism、Mermaid |
+| 内容渲染 | React Markdown、rehype-sanitize、remark-math/rehype-katex、Prism、Mermaid |
 | 后端 | FastAPI、SQLAlchemy 2、Pydantic 2、JWT、RestrictedPython |
 | 数据库 | 本地默认 SQLite，生产可使用 PostgreSQL |
 | 交付 | Docker Compose、GitHub Actions |
@@ -45,7 +45,7 @@ PyTrail 是一个面向 Python 学习路径的全栈应用。它将 9 门课程�
 
 ## 本地启动
 
-需要 Python 3.14、[uv](https://docs.astral.sh/uv/) 和 Node.js 24。
+需要 Python 3.14、[uv](https://docs.astral.sh/uv/)、Node.js 24 和 pnpm 11。
 
 启动 API：
 
@@ -59,8 +59,8 @@ uv run uvicorn app.main:app --reload --port 8000
 
 ```bash
 cd frontend
-npm ci
-npm run dev
+pnpm install --frozen-lockfile
+pnpm dev
 ```
 
 访问地址：
@@ -78,7 +78,21 @@ Vite 默认将 `/api` 代理到 `http://127.0.0.1:8000`。
 docker compose up --build
 ```
 
-Compose 适合本地联调。生产环境必须设置强随机 `SECRET_KEY`、`PYTRAIL_ENV=production`、受限的 `CORS_ORIGINS`，并通过 HTTPS 反向代理提供前端构建产物。
+Compose 适合本地联调。生产环境必须设置强随机 `SECRET_KEY`、`PYTRAIL_ENV=production`、受限的 `CORS_ORIGINS`，并通过 HTTPS 反向代理提供前端构建产物或 API 托管的静态目录。
+
+临时不使用 Docker 时，可以构建前端并让本机 API 进程以单端口提供整个应用：
+
+```powershell
+cd frontend
+pnpm build
+cd ../backend
+uv sync --locked
+$env:PYTRAIL_STATIC_DIR = (Resolve-Path ../frontend/dist)
+$env:PYTRAIL_PRACTICE_PYTHON = (Resolve-Path .venv/Scripts/python.exe)
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+此时练习代码由指定的本机 Python 启动独立 RestrictedPython 子进程，仍保留源码校验、超时和协议限制；它不是容器级安全沙箱，不应直接承载不可信公网流量。
 
 ## 配置
 
@@ -90,6 +104,9 @@ Compose 适合本地联调。生产环境必须设置强随机 `SECRET_KEY`、`P
 | `PYTRAIL_ENV` | `development` | `production`/`prod` 会启用密钥强校验 |
 | `PYTRAIL_ENABLE_LEGACY_EXECUTE` | 关闭 | 设为 `1` 且非生产环境时启用旧课内演练 `/api/execute`；该入口不是沙箱 |
 | `CORS_ORIGINS` | `http://localhost:5173` | 逗号分隔的允许来源 |
+| `PYTRAIL_STATIC_DIR` | 未设置 | 指向包含 `index.html` 的前端构建目录时，API 同时托管静态文件并提供 SPA 回退 |
+| `PYTRAIL_PRACTICE_PYTHON` | API 当前解释器 | 练习 worker 使用的 Python 命令或路径；临时本机部署可显式指向本机虚拟环境 |
+| `PYTRAIL_USERLESS_MODE` | 关闭 | 设为 `1`/`true` 后关闭登录注册和所有进度写入，练习与速测可匿名运行 |
 | `VITE_API_URL` | `/api` | 前端请求 API 的基础路径 |
 | `VITE_API_PROXY_TARGET` | `http://127.0.0.1:8000` | Vite 开发代理目标 |
 
@@ -111,19 +128,25 @@ API 启动时会读取：
 ```bash
 # 后端
 cd backend
+uv run ruff check app tests
+uv run ruff format --check app tests
 uv run python -m unittest discover -s tests -v
 
 # 前端
 cd frontend
-npm test
-npm run build
+pnpm lint
+pnpm format:check
+pnpm test
+pnpm build
 ```
 
-CI 使用相同的测试与构建入口。完整的验证矩阵和排障方法见 [开发与运维](docs/development.md)。
+CI 使用相同的质量检查、测试与构建入口。完整的验证矩阵和排障方法见 [开发与运维](docs/development.md)。
 
 ## 安全边界
 
-练习场运行器只面向受控的函数题，执行前要求登录，并限制为每个用户/IP 每分钟 20 次。提交源码最大 12 KB，总执行超时 2 秒。导入、文件、网络、子进程、动态求值和私有属性遍历会被拒绝。
+练习场运行器只面向受控的函数题，默认要求登录，并限制为每个用户/IP 每分钟 20 次。提交源码最大 12 KB，总执行超时 2 秒。导入、文件、网络、子进程、动态求值和私有属性遍历会被拒绝。
+
+受信任的内网或演示部署可以设置 `PYTRAIL_USERLESS_MODE=1`：前端隐藏登录入口，练习和课内速测无需登录，服务端跳过课程与练习进度写入。该模式仍按 IP 限流和执行限制运行，不接受旧 token，也不提供用户恢复或历史记录。
 
 RestrictedPython 子进程不是面向敌对公网流量的完整强隔离沙箱。对外开放时，应把代码执行迁移到独立的临时容器或专用沙箱服务。旧的 `/api/execute` 演练入口默认关闭，仅在本地开发环境通过 `PYTRAIL_ENABLE_LEGACY_EXECUTE=1` 显式开启，生产环境一律返回 404。
 

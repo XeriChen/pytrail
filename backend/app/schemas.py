@@ -86,7 +86,6 @@ class LessonDetailOut(LessonSummaryOut):
     lesson_links: dict[str, int]
 
 
-
 class ProgressIn(BaseModel):
     lesson_id: int
     completed: bool = True

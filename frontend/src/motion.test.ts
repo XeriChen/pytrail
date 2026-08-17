@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { cardTilt, createParticles, cursorRing, magneticOffset, particleColor, springStep, stepScene } from './motion'
+import {
+  cardTilt,
+  createParticles,
+  cursorRing,
+  magneticOffset,
+  particleColor,
+  springStep,
+  stepScene,
+} from './motion'
 
 describe('shipped motion helpers', () => {
   it('springs a value toward the target', () => {
@@ -30,7 +38,10 @@ describe('shipped motion helpers', () => {
 
   it('steps the canvas particle scene from time and pointer', () => {
     const start = createParticles(8, 400, 300)
-    const next = stepScene(start, { x: 200, y: 150 }, 1 / 60, { w: 400, h: 300 })
+    const next = stepScene(start, { x: 200, y: 150 }, 1 / 60, {
+      w: 400,
+      h: 300,
+    })
     expect(next).toHaveLength(8)
     expect(next.some((p, i) => p.x !== start[i].x || p.y !== start[i].y)).toBe(true)
     expect(particleColor(0)).toContain('226')
