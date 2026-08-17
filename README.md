@@ -18,7 +18,7 @@ PyTrail 是一个面向 Python 学习路径的全栈应用。它将 9 门课程�
 | 层 | 技术 |
 | --- | --- |
 | 前端 | React 19、TypeScript 7、Vite 8、React Router、CodeMirror 6 |
-| 内容渲染 | React Markdown、rehype-sanitize、remark-math/rehype-katex、Prism、Mermaid |
+| 内容渲染 | React Markdown、rehype-sanitize、remark-math/rehype-katex、KaTeX 0.16、Prism、Mermaid |
 | 后端 | FastAPI、SQLAlchemy 2、Pydantic 2、JWT、RestrictedPython |
 | 数据库 | 本地默认 SQLite，生产可使用 PostgreSQL |
 | 交付 | Docker Compose、GitHub Actions |

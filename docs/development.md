@@ -29,6 +29,8 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
+Markdown 公式链路保持 `rehype-katex` 与 KaTeX 0.16 兼容，并显式依赖 `style-to-js` 以保留浏览器构建中的定位样式。升级其中任一依赖时，应同时运行 renderer 测试、生产构建和公式页面浏览器验收。
+
 检查：
 
 ```text

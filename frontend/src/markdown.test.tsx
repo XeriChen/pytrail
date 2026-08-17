@@ -34,13 +34,19 @@ describe('sanitized markdown renderer', () => {
   })
 
   it('renders block and inline math through KaTeX', () => {
-    const html = renderMarkdown(
-      'Sample mean $\\bar{x}$:\n\n$$\n\\bar{x} = \\frac{\\sum_{i=1}^{n}x_{i}}{n}\n$$',
+    const { container } = render(
+      <CourseMarkdown
+        markdown={'Sample mean $\\bar{x}$:\n\n$$\n\\bar{x} = \\frac{\\sum_{i=1}^{n}x_{i}}{n}\n$$'}
+        assetBaseUrl="/api/course-assets/python-foundations/"
+      />,
     )
+    const html = container.innerHTML
+    const strut = container.querySelector<HTMLElement>('.katex .strut, .katex .katex-strut')
     expect(html).toContain('class="katex"')
     expect(html).toContain('class="katex-display"')
     expect(html).not.toContain('$$')
     expect(html).not.toContain('language-math')
+    expect(strut?.style.height).not.toBe('')
   })
 
   it('sanitizes raw HTML mixed with math while keeping KaTeX output', () => {
