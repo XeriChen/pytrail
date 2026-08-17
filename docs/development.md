@@ -11,6 +11,8 @@
 
 Windows PowerShell、macOS 和 Linux 均可进行日常开发。练习子进程的 Unix `resource` 限制仅在支持该模块的平台生效。
 
+仓库通过 `.gitattributes` 强制 TypeScript 和 TSX 文件使用 LF，避免 Windows 的 `core.autocrlf=true` 让 Prettier 对未改动源码产生换行格式告警。
+
 ## 首次启动
 
 后端：
