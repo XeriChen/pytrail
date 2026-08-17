@@ -17,6 +17,7 @@
         "returns": "bool"
       },
       "starter_code": "def is_path_allowed(rules: list[dict[str, str]], path: str) -> bool:\n    return True\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `is_path_allowed` 的参数和 robots, strings 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": [
@@ -77,6 +78,7 @@
         "returns": "str"
       },
       "starter_code": "def build_url(base_url: str, params: dict[str, object]) -> str:\n    return base_url\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `build_url` 的参数和 url, http 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": [
@@ -124,6 +126,7 @@
         "returns": "list[dict[str, object]]"
       },
       "starter_code": "def normalize_records(records: list[dict[str, object]]) -> list[dict[str, object]]:\n    return []\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `normalize_records` 的参数和 parsing, strings 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": [[
@@ -173,6 +176,7 @@
         "returns": "list[str]"
       },
       "starter_code": "def deduplicate_urls(urls: list[str]) -> list[str]:\n    return []\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `deduplicate_urls` 的参数和 url, queues 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": [[

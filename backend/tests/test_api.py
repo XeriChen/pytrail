@@ -36,7 +36,14 @@ from app.auth import (  # noqa: E402
 from app.database import SessionLocal, engine  # noqa: E402
 from app.main import app  # noqa: E402
 from app.metrics import compute_streak  # noqa: E402
-from app.models import Exercise, ExerciseProgress, Progress, User  # noqa: E402
+from app.models import (  # noqa: E402
+    Exercise,
+    ExerciseProgress,
+    LearningActivity,
+    Lesson,
+    Progress,
+    User,
+)
 from app.ratelimit import auth_limiter, practice_limiter  # noqa: E402
 
 _EMAILS = count(1)
@@ -98,6 +105,7 @@ class ApiTests(unittest.TestCase):
         with SessionLocal() as db:
             exercise_progress_before = len(db.scalars(select(ExerciseProgress)).all())
             lesson_progress_before = len(db.scalars(select(Progress)).all())
+            activity_before = len(db.scalars(select(LearningActivity)).all())
             users_before = len(db.scalars(select(User)).all())
         with patch.dict(os.environ, {USERLESS_MODE_ENV: "1"}):
             self.assertEqual(
@@ -143,6 +151,9 @@ class ApiTests(unittest.TestCase):
             )
             self.assertEqual(
                 len(db.scalars(select(Progress)).all()), lesson_progress_before
+            )
+            self.assertEqual(
+                len(db.scalars(select(LearningActivity)).all()), activity_before
             )
             self.assertEqual(len(db.scalars(select(User)).all()), users_before)
 
@@ -207,6 +218,7 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(detail.status_code, 200, detail.text)
         payload = detail.json()
         self.assertEqual(payload["function_name"], "prime_summary")
+        self.assertEqual(len(payload["hints"]), 3)
         self.assertEqual(len(payload["cases"]), 4)
         self.assertIn("expected", payload["cases"][0])
         self.assertNotIn("expected_answer", payload)
@@ -246,8 +258,25 @@ class ApiTests(unittest.TestCase):
         )
         self.assertEqual(failed.status_code, 200, failed.text)
         self.assertFalse(failed.json()["passed"])
+        self.assertEqual(failed.json()["feedback_category"], "wrong_output")
         self.assertEqual(failed.json()["progress"]["status"], "in_progress")
         self.assertEqual(failed.json()["progress"]["attempts"], 1)
+        task = self.client.get("/api/dashboard", headers=auth["headers"]).json()[
+            "today_task"
+        ]
+        self.assertEqual(task["reason_code"], "resume_practice")
+        self.assertEqual(task["slug"], slug)
+        with SessionLocal() as db:
+            self.assertEqual(
+                len(
+                    db.scalars(
+                        select(LearningActivity).where(
+                            LearningActivity.user_id == auth["user"]["id"]
+                        )
+                    ).all()
+                ),
+                0,
+            )
 
         passed_code = "def filter_and_square(numbers, minimum):\n    return [value * value for value in numbers if value >= minimum]\n"
         passed = self.client.post(
@@ -257,6 +286,7 @@ class ApiTests(unittest.TestCase):
         )
         self.assertEqual(passed.status_code, 200, passed.text)
         self.assertTrue(passed.json()["passed"], passed.text)
+        self.assertEqual(passed.json()["feedback_category"], "all_passed")
         self.assertEqual(passed.json()["progress"]["status"], "passed")
 
         again = self.client.post(
@@ -266,6 +296,15 @@ class ApiTests(unittest.TestCase):
         )
         self.assertEqual(again.json()["progress"]["status"], "passed")
         self.assertEqual(again.json()["progress"]["attempts"], 3)
+        self.assertEqual(again.json()["feedback_category"], "wrong_output")
+        with SessionLocal() as db:
+            activities = db.scalars(
+                select(LearningActivity).where(
+                    LearningActivity.user_id == auth["user"]["id"]
+                )
+            ).all()
+            self.assertEqual(len(activities), 1)
+            self.assertEqual(activities[0].kind, "practice_passed")
         resumed = self.client.get(
             f"/api/practice/exercises/{slug}", headers=auth["headers"]
         ).json()
@@ -661,6 +700,8 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(empty_body["streak"], 0)
         self.assertEqual(empty_body["lessons_completed"], 0)
         self.assertEqual(empty_body["completion"], 0)
+        self.assertEqual(empty_body["today_task"]["reason_code"], "start_lesson")
+        self.assertEqual(empty_body["recent_activity"], [])
 
         courses = self.client.get("/api/courses").json()
         lessons = self.client.get(f"/api/courses/{courses[0]['id']}").json()["lessons"]
@@ -679,6 +720,8 @@ class ApiTests(unittest.TestCase):
         self.assertGreater(after_one["completion"], 0)
         self.assertEqual(after_one["streak"], 1)
         self.assertNotEqual(after_one["streak"], 4)
+        today = datetime.now(UTC).date()
+        self.assertEqual(after_one["recent_activity"], [today.isoformat()])
 
         yesterday_progress = self.client.post(
             "/api/progress",
@@ -688,12 +731,15 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(yesterday_progress.status_code, 200)
         db = SessionLocal()
         try:
-            rows = db.scalars(
-                select(Progress).where(Progress.user_id == auth["user"]["id"])
-            ).all()
-            self.assertEqual(len(rows), 2)
-            older = next(item for item in rows if item.lesson_id == second_id)
-            older.updated_at = datetime.now(UTC) - timedelta(days=1)
+            lesson = db.get(Lesson, second_id)
+            activity = db.scalar(
+                select(LearningActivity).where(
+                    LearningActivity.user_id == auth["user"]["id"],
+                    LearningActivity.source_key == lesson.source_path,
+                )
+            )
+            self.assertIsNotNone(activity)
+            activity.activity_date = today - timedelta(days=1)
             db.commit()
         finally:
             db.close()
@@ -701,6 +747,13 @@ class ApiTests(unittest.TestCase):
         after_two = self.client.get("/api/dashboard", headers=headers).json()
         self.assertEqual(after_two["lessons_completed"], 2)
         self.assertEqual(after_two["streak"], 2)
+        self.assertEqual(
+            after_two["recent_activity"],
+            [
+                (today - timedelta(days=1)).isoformat(),
+                today.isoformat(),
+            ],
+        )
         self.assertGreater(after_two["completion"], after_one["completion"])
 
     def test_compute_streak_from_history(self) -> None:

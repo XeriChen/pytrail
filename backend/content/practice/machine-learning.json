@@ -19,6 +19,7 @@
         "returns": "str"
       },
       "starter_code": "def knn_predict(train_points: list[list[float]], labels: list[str], query: list[float], k: int) -> str:\n    return \"\"\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `knn_predict` 的参数和 knn, distance 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": [
@@ -77,6 +78,7 @@
         "returns": "float"
       },
       "starter_code": "def gini_impurity(labels: list[str]) -> float:\n    return 0.0\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `gini_impurity` 的参数和 decision-tree, classification 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": [[]],
@@ -124,6 +126,7 @@
         "returns": "dict[str, float]"
       },
       "starter_code": "def linear_regression(xs: list[float], ys: list[float]) -> dict[str, float]:\n    return {\"slope\": 0.0, \"intercept\": 0.0, \"r_squared\": 0.0}\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `linear_regression` 的参数和 linear-regression, statistics 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": [[1, 2, 3], [2, 4, 6]],
@@ -171,6 +174,7 @@
         "returns": "list[int]"
       },
       "starter_code": "def assign_centroids(points: list[list[float]], centroids: list[list[float]]) -> list[int]:\n    return []\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `assign_centroids` 的参数和 k-means, clustering 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": [

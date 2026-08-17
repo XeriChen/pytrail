@@ -17,6 +17,7 @@
         "returns": "dict[str, object]"
       },
       "starter_code": "def prime_summary(start: int, end: int) -> dict:\n    return {\"primes\": [], \"count\": 0}\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `prime_summary` 的参数和 loops, conditions 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": [2, 10],
@@ -56,6 +57,7 @@
         "returns": "list[int]"
       },
       "starter_code": "def filter_and_square(numbers: list[int], minimum: int) -> list[int]:\n    return []\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `filter_and_square` 的参数和 lists, filtering 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": [[1, -2, 3, 4], 2],
@@ -89,6 +91,7 @@
         "returns": "dict[str, int]"
       },
       "starter_code": "def word_frequency(text: str) -> dict[str, int]:\n    return {}\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `word_frequency` 的参数和 strings, dictionaries 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": ["Python python PYTHON"],
@@ -127,6 +130,7 @@
         "returns": "dict[str, dict[str, int]]"
       },
       "starter_code": "def group_scores(records: list[dict]) -> dict:\n    return {}\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `group_scores` 的参数和 dictionaries, aggregation 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": [[{"group": "A", "score": 82}, {"group": "B", "score": 91}, {"group": "A", "score": 95}]],

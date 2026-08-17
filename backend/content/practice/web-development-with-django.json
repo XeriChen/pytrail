@@ -18,6 +18,7 @@
         "returns": "dict[str, object]"
       },
       "starter_code": "def dispatch_request(routes: list[dict], method: str, path: str) -> dict:\n    return {\"status\": 404}\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `dispatch_request` 的参数和 django, routing 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": [
@@ -79,6 +80,7 @@
         "returns": "dict[str, str]"
       },
       "starter_code": "def parse_cookies(header: str) -> dict[str, str]:\n    return {}\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `parse_cookies` 的参数和 django, cookies 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": ["session=abc123; theme=dark; language=zh-CN"],
@@ -118,6 +120,7 @@
         "returns": "list[dict[str, object]]"
       },
       "starter_code": "def serialize_records(records: list[dict], fields: list[str]) -> list[dict]:\n    return []\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `serialize_records` 的参数和 django-rest-framework, serialization 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": [
@@ -173,6 +176,7 @@
         "returns": "dict[str, object]"
       },
       "starter_code": "def paginate_resources(items: list, page: int, page_size: int) -> dict:\n    return {}\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `paginate_resources` 的参数和 django-rest-framework, pagination 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": [["a", "b", "c", "d", "e", "f", "g"], 2, 3],

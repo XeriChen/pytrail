@@ -1,8 +1,10 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     Column,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -35,6 +37,9 @@ class User(Base):
         back_populates="user", cascade="all, delete-orphan"
     )
     exercise_progresses: Mapped[list[ExerciseProgress]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    learning_activities: Mapped[list[LearningActivity]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
 
@@ -87,6 +92,7 @@ class Exercise(Base):
     order: Mapped[int] = mapped_column(Integer, default=1)
     prompt: Mapped[str] = mapped_column(Text)
     starter_code: Mapped[str] = mapped_column(Text, default="")
+    hints: Mapped[list[str]] = mapped_column(JSON, default=list)
     expected_answer: Mapped[str] = mapped_column(String(160), default="")
     lesson: Mapped[Lesson] = relationship(back_populates="exercises")
     cases: Mapped[list[ExerciseCase]] = relationship(
@@ -180,3 +186,28 @@ class Progress(Base):
         DateTime(timezone=True), default=utc_now, onupdate=utc_now
     )
     user: Mapped[User] = relationship(back_populates="progresses")
+
+
+class LearningActivity(Base):
+    __tablename__ = "learning_activities"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "activity_date",
+            "kind",
+            "source_key",
+            name="uq_learning_activity_user_day_source",
+        ),
+        Index("ix_learning_activities_user_date", "user_id", "activity_date"),
+    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    activity_date: Mapped[date] = mapped_column(Date)
+    kind: Mapped[str] = mapped_column(String(32))
+    source_key: Mapped[str] = mapped_column(String(512))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now
+    )
+    user: Mapped[User] = relationship(back_populates="learning_activities")

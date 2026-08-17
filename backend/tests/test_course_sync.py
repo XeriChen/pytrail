@@ -4,6 +4,7 @@ import json
 import shutil
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 
 from sqlalchemy import create_engine, event, func, select
@@ -23,6 +24,7 @@ from app.models import (
     Exercise,
     ExerciseCase,
     ExerciseProgress,
+    LearningActivity,
     Lesson,
     Progress,
     User,
@@ -165,6 +167,11 @@ class CourseSyncTests(unittest.TestCase):
                         "returns": "int",
                     },
                     "starter_code": f"def solve_{position}(value: int) -> int:\n    return value\n",
+                    "hints": [
+                        "Read the input.",
+                        "Return the value.",
+                        "Use return value.",
+                    ],
                     "cases": [
                         {"args": [1], "expected": 1},
                         {"args": [0], "expected": 0},
@@ -226,6 +233,14 @@ class CourseSyncTests(unittest.TestCase):
         self.db.add(
             Progress(user_id=user.id, lesson_id=lesson.id, completed=True, score=80)
         )
+        self.db.add(
+            LearningActivity(
+                user_id=user.id,
+                activity_date=date.today(),
+                kind="lesson_completed",
+                source_key=lesson.source_path,
+            )
+        )
         self.db.commit()
         path = self.root / "fixture-one" / "01.第一课.md"
         path.write_text(
@@ -234,6 +249,7 @@ class CourseSyncTests(unittest.TestCase):
         result = sync_courses(self.db, self.root, self.specs, self.practice_root)
         self.assertTrue(result.changed)
         self.assertEqual(self.db.scalar(select(func.count(Progress.id))), 0)
+        self.assertEqual(self.db.scalar(select(func.count(LearningActivity.id))), 0)
         self.assertIn(
             "内容变化",
             self.db.scalar(select(Lesson.markdown).where(Lesson.title == "第一课")),

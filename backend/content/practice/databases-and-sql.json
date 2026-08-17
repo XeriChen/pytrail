@@ -17,6 +17,7 @@
         "returns": "list[dict[str, object]]"
       },
       "starter_code": "def apply_mutations(records: list[dict], mutations: list[dict]) -> list[dict]:\n    return []\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `apply_mutations` 的参数和 sql, dml 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": [
@@ -81,6 +82,7 @@
         "returns": "list[dict[str, object]]"
       },
       "starter_code": "def group_sales(rows: list[dict], minimum_total: int) -> list[dict]:\n    return []\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `group_sales` 的参数和 sql, group-by 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": [
@@ -147,6 +149,7 @@
         "returns": "list[dict[str, object]]"
       },
       "starter_code": "def dense_rank(employees: list[dict]) -> list[dict]:\n    return []\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `dense_rank` 的参数和 sql, window-functions 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": [[
@@ -202,6 +205,7 @@
         "returns": "list[dict[str, object]]"
       },
       "starter_code": "def aggregate_events(events: list[dict]) -> list[dict]:\n    return []\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `aggregate_events` 的参数和 hive, aggregation 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": [[

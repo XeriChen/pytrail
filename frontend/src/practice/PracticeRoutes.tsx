@@ -19,6 +19,7 @@ export function PracticeRoutes({
   userId,
   onAuth,
   onOpenLesson,
+  onProgress,
 }: {
   locale: Locale
   theme: Theme
@@ -28,6 +29,7 @@ export function PracticeRoutes({
   userId: number | null
   onAuth: () => void
   onOpenLesson: (lessonId: number) => void
+  onProgress?: () => void
 }) {
   const loading = locale === 'zh' ? '正在打开练习场' : 'Opening practice lab'
   return (
@@ -58,6 +60,7 @@ export function PracticeRoutes({
               userId={userId}
               onAuth={onAuth}
               onOpenLesson={onOpenLesson}
+              onProgress={onProgress}
             />
           }
         />

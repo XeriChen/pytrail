@@ -16,6 +16,7 @@
         "returns": "dict[str, object]"
       },
       "starter_code": "def clean_payload(payload: dict[str, object]) -> dict[str, object]:\n    return {}\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `clean_payload` 的参数和 api, json 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": [{
@@ -83,6 +84,7 @@
         "returns": "list[dict[str, object]]"
       },
       "starter_code": "def merge_carts(server_items: list[dict[str, object]], local_items: list[dict[str, object]]) -> list[dict[str, object]]:\n    return []\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `merge_carts` 的参数和 ecommerce, dictionaries 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": [
@@ -148,6 +150,7 @@
         "returns": "list[str]"
       },
       "starter_code": "def weighted_schedule(servers: list[dict[str, object]], rounds: int) -> list[str]:\n    return []\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `weighted_schedule` 的参数和 load-balancing, scheduling 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": [
@@ -200,6 +203,7 @@
         "returns": "list[list[object]]"
       },
       "starter_code": "def batch_items(items: list[object], size: int) -> list[list[object]]:\n    return []\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `batch_items` 的参数和 batching, lists 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
       "cases": [
         {
           "args": [[1, 2, 3, 4, 5], 2],

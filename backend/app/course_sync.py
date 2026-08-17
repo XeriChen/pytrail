@@ -19,6 +19,7 @@ from .models import (
     Exercise,
     ExerciseCase,
     ExerciseProgress,
+    LearningActivity,
     Lesson,
     Progress,
     Tag,
@@ -49,6 +50,7 @@ class ExerciseSeed:
     function_name: str | None = None
     signature_json: str = "{}"
     tags: tuple[str, ...] = ()
+    hints: tuple[str, ...] = ()
     cases: tuple[PracticeCaseSeed, ...] = ()
 
 
@@ -228,6 +230,7 @@ def _programming_seed(seed: PracticeExerciseSeed) -> ExerciseSeed:
         function_name=seed.function_name,
         signature_json=_canonical_json(signature),
         tags=seed.tags,
+        hints=seed.hints,
         cases=seed.cases,
     )
 
@@ -583,6 +586,7 @@ def _exercise_seed_state(seed: ExerciseSeed, order: int) -> tuple[object, ...]:
         order,
         seed.prompt,
         seed.starter_code,
+        seed.hints,
         seed.expected_answer,
         tuple(sorted(seed.tags)),
         tuple(
@@ -603,6 +607,7 @@ def _exercise_row_state(row: Exercise) -> tuple[object, ...]:
         row.order,
         row.prompt,
         row.starter_code,
+        tuple(row.hints),
         row.expected_answer,
         tuple(sorted(tag.slug for tag in row.tags)),
         tuple(
@@ -735,6 +740,7 @@ def sync_courses(
     if manifest_matches(db, manifests):
         return SyncResult(False, content_index_from_db(db, manifests, root))
     try:
+        db.execute(delete(LearningActivity))
         db.execute(delete(Progress))
         db.execute(delete(ExerciseProgress))
         db.execute(delete(exercise_tags))
@@ -775,6 +781,7 @@ def sync_courses(
                         order=order,
                         prompt=seed.prompt,
                         starter_code=seed.starter_code,
+                        hints=list(seed.hints),
                         expected_answer=seed.expected_answer,
                     )
                     exercise.cases = [

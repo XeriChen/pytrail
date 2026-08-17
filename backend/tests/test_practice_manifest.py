@@ -44,6 +44,7 @@ class ShippedPracticeManifestTests(unittest.TestCase):
             for item in items:
                 self.assertIn(item.lesson_source_path, sources[course_slug])
                 self.assertGreaterEqual(len(item.cases), 2)
+                self.assertEqual(len(item.hints), 3)
                 self.assertIn(item.difficulty, {"easy", "medium", "hard"})
                 self.assertIn(f"def {item.function_name}(", item.starter_code)
 
@@ -75,6 +76,7 @@ class PracticeManifestValidationTests(unittest.TestCase):
                 "returns": "int",
             },
             "starter_code": "def solve(value: int) -> int:\n    return value\n",
+            "hints": ["读取输入。", "保持值不变。", "直接返回 value。"],
             "cases": [
                 {"args": [1], "expected": 1, "explanation": "正数"},
                 {"args": [0], "expected": 0, "explanation": "零"},
@@ -135,6 +137,14 @@ class PracticeManifestValidationTests(unittest.TestCase):
                 broken["exercises"][0][key] = value
             self._write(broken)
             with self.assertRaisesRegex(PracticeManifestError, message):
+                self._load()
+
+    def test_rejects_invalid_hints(self) -> None:
+        for hints in (["one", "two"], ["one", "two", "three", "four"], [""]):
+            broken = copy.deepcopy(self.document)
+            broken["exercises"][0]["hints"] = hints
+            self._write(broken)
+            with self.assertRaisesRegex(PracticeManifestError, "hint"):
                 self._load()
 
     def test_rejects_wrong_course_size_and_malformed_json(self) -> None:

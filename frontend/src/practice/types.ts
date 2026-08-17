@@ -46,6 +46,7 @@ export type PracticeDetail = PracticeExercise & {
   function_name: string
   signature: { parameters: { name: string; type: string }[]; returns: string }
   starter_code: string
+  hints: string[]
   cases: PracticeCase[]
 }
 
@@ -55,6 +56,7 @@ export type PracticeRunResult = {
   passed_count: number
   total_count: number
   error: string | null
+  feedback_category: 'all_passed' | 'wrong_output' | 'runtime_error' | 'validation_error'
   cases: {
     order: number
     passed: boolean

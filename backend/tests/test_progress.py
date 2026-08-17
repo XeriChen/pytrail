@@ -12,8 +12,9 @@ from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.activity_service import LESSON_COMPLETED
 from app.database import Base
-from app.models import Course, Lesson, Progress, User
+from app.models import Course, LearningActivity, Lesson, Progress, User
 from app.progress_service import build_progress_upsert, upsert_lesson_progress
 
 
@@ -85,6 +86,19 @@ class ProgressUpsertTests(unittest.TestCase):
         self.assertEqual(second.completed, False)
         self.assertEqual(second.score, 40)
         self.assertEqual(self.db.scalar(select(func.count(Progress.id))), 1)
+
+    def test_successful_progress_records_one_atomic_activity_per_day(self) -> None:
+        for _ in range(2):
+            upsert_lesson_progress(
+                self.db,
+                user_id=self.user_id,
+                lesson_id=self.lesson_id,
+                completed=True,
+                score=100,
+                activity_kind=LESSON_COMPLETED,
+                activity_source_key=self.lesson.source_path,
+            )
+        self.assertEqual(self.db.scalar(select(func.count(LearningActivity.id))), 1)
 
     def test_concurrent_first_writes_produce_one_row_without_errors(self) -> None:
         threads = 6
