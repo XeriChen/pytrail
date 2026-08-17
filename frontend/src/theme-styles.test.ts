@@ -10,10 +10,13 @@ function hexToken(name: string): string {
 }
 
 function luminance(hex: string): number {
-  const channels = hex.slice(1).match(/.{2}/g)!.map((part) => parseInt(part, 16) / 255)
-  const [r, g, b] = channels.map((value) => (
-    value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
-  ))
+  const channels = hex
+    .slice(1)
+    .match(/.{2}/g)!
+    .map((part) => parseInt(part, 16) / 255)
+  const [r, g, b] = channels.map((value) =>
+    value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4,
+  )
   return 0.2126 * r + 0.7152 * g + 0.0722 * b
 }
 
@@ -42,10 +45,13 @@ describe('mineral light theme', () => {
     expect(css).toContain('color: var(--code-text)')
     expect(css).toContain('background: var(--diagram-toolbar)')
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.course-card/)
-    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.spin,[\s\S]*\.mermaid-loading span \{ animation: none; \}/)
+    expect(css).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.spin,[\s\S]*\.mermaid-loading span \{ animation: none; \}/,
+    )
     expect(css).toContain(':is(.course-card:hover, .practice-card:hover)')
-    const letterSpacing = [...css.matchAll(/letter-spacing:\s*([^;]+);/g)]
-      .map((match) => match[1].trim())
+    const letterSpacing = [...css.matchAll(/letter-spacing:\s*([^;]+);/g)].map((match) =>
+      match[1].trim(),
+    )
     expect(new Set(letterSpacing)).toEqual(new Set(['0']))
   })
 })

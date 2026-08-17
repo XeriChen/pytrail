@@ -9,14 +9,29 @@ let additionalLanguagesPromise: Promise<void> | null = null
 export const MINERAL_LIGHT_CODE_THEME = {
   plain: { color: '#d8ded8', backgroundColor: '#171c19' },
   styles: [
-    { types: ['comment', 'prolog', 'doctype', 'cdata'], style: { color: '#7f8d84', fontStyle: 'italic' } },
+    {
+      types: ['comment', 'prolog', 'doctype', 'cdata'],
+      style: { color: '#7f8d84', fontStyle: 'italic' },
+    },
     { types: ['punctuation'], style: { color: '#aab5ad' } },
     { types: ['keyword', 'boolean'], style: { color: '#82a985' } },
-    { types: ['property', 'tag', 'constant', 'symbol', 'deleted'], style: { color: '#d07a68' } },
+    {
+      types: ['property', 'tag', 'constant', 'symbol', 'deleted'],
+      style: { color: '#d07a68' },
+    },
     { types: ['number'], style: { color: '#78a3a7' } },
-    { types: ['selector', 'attr-name', 'string', 'char', 'builtin', 'inserted'], style: { color: '#d39a7b' } },
-    { types: ['operator', 'entity', 'url', 'variable'], style: { color: '#c5b56a' } },
-    { types: ['atrule', 'attr-value', 'function'], style: { color: '#d1ad62' } },
+    {
+      types: ['selector', 'attr-name', 'string', 'char', 'builtin', 'inserted'],
+      style: { color: '#d39a7b' },
+    },
+    {
+      types: ['operator', 'entity', 'url', 'variable'],
+      style: { color: '#c5b56a' },
+    },
+    {
+      types: ['atrule', 'attr-value', 'function'],
+      style: { color: '#d1ad62' },
+    },
     { types: ['class-name'], style: { color: '#8e9fc7' } },
     { types: ['regex', 'important'], style: { color: '#c88b64' } },
   ],
@@ -85,7 +100,12 @@ export function normalizeCodeLanguage(raw?: string): NormalizedCodeLanguage {
     .toLowerCase()
     .replace(/^language-/, '')
   if (!cleaned) return { language: 'plain', label: 'Text' }
-  return LANGUAGE_ALIASES[cleaned] ?? { language: 'plain', label: raw?.trim() || 'Text' }
+  return (
+    LANGUAGE_ALIASES[cleaned] ?? {
+      language: 'plain',
+      label: raw?.trim() || 'Text',
+    }
+  )
 }
 
 export interface CodeBlockProps {
@@ -96,16 +116,12 @@ export interface CodeBlockProps {
   copiedLabel: string
 }
 
-export function CodeBlock({
-  code,
-  language,
-  theme,
-  copyLabel,
-  copiedLabel,
-}: CodeBlockProps) {
+export function CodeBlock({ code, language, theme, copyLabel, copiedLabel }: CodeBlockProps) {
   const normalized = normalizeCodeLanguage(language)
   const [copied, setCopied] = useState(false)
-  const [languageReady, setLanguageReady] = useState(() => Boolean(Prism.languages[normalized.language]))
+  const [languageReady, setLanguageReady] = useState(() =>
+    Boolean(Prism.languages[normalized.language]),
+  )
   const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -131,9 +147,12 @@ export function CodeBlock({
     }
   }, [normalized.language])
 
-  useEffect(() => () => {
-    if (resetTimer.current) clearTimeout(resetTimer.current)
-  }, [])
+  useEffect(
+    () => () => {
+      if (resetTimer.current) clearTimeout(resetTimer.current)
+    },
+    [],
+  )
 
   const copyCode = async () => {
     try {
@@ -148,11 +167,12 @@ export function CodeBlock({
   }
 
   const actionLabel = copied ? copiedLabel : copyLabel
-  const canHighlight = normalized.language !== 'plain'
-    && languageReady
-    && Boolean(Prism.languages[normalized.language])
+  const canHighlight =
+    normalized.language !== 'plain' &&
+    languageReady &&
+    Boolean(Prism.languages[normalized.language])
   const source = !canHighlight ? (
-    <pre className="code-block-source" style={{ whiteSpace: 'pre' }}>
+    <pre className="code-block-source" style={{ whiteSpace: 'pre-wrap' }}>
       <code>{code}</code>
     </pre>
   ) : (
@@ -162,7 +182,10 @@ export function CodeBlock({
       language={normalized.language}
     >
       {({ className, style, tokens, getLineProps, getTokenProps }) => (
-        <pre className={`${className} code-block-source`} style={{ ...style, whiteSpace: 'pre' }}>
+        <pre
+          className={`${className} code-block-source`}
+          style={{ ...style, whiteSpace: 'pre-wrap' }}
+        >
           <code>
             {tokens.map((line, lineIndex) => (
               <span key={lineIndex} {...getLineProps({ line })}>

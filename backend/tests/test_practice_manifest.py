@@ -9,7 +9,6 @@ from pathlib import Path
 from app.course_sync import COURSE_SPECS, build_manifests
 from app.practice_manifest import PracticeManifestError, load_practice_manifests
 
-
 CONTENT_ROOT = Path(__file__).resolve().parents[1] / "content" / "python-100-days"
 PRACTICE_ROOT = Path(__file__).resolve().parents[1] / "content" / "practice"
 

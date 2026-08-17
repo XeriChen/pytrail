@@ -2,18 +2,59 @@ import { isValidElement } from 'react'
 import type { ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
+import 'katex/dist/katex.min.css'
 import type { Schema } from 'hast-util-sanitize'
 import type { Theme } from './theme'
 import { CodeBlock } from './code-block'
 import { MermaidDiagram, type MermaidLabels } from './mermaid-diagram'
 
 const allowedTags = [
-  'a', 'b', 'blockquote', 'br', 'code', 'dd', 'del', 'details', 'dl', 'dt', 'em',
-  'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'i', 'img', 'ins', 'kbd', 'li', 'ol',
-  'p', 'pre', 'q', 's', 'samp', 'span', 'strong', 'sub', 'summary', 'sup', 'table',
-  'tbody', 'td', 'th', 'thead', 'tr', 'ul', 'var',
+  'a',
+  'b',
+  'blockquote',
+  'br',
+  'code',
+  'dd',
+  'del',
+  'details',
+  'dl',
+  'dt',
+  'em',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'hr',
+  'i',
+  'img',
+  'ins',
+  'kbd',
+  'li',
+  'ol',
+  'p',
+  'pre',
+  'q',
+  's',
+  'samp',
+  'span',
+  'strong',
+  'sub',
+  'summary',
+  'sup',
+  'table',
+  'tbody',
+  'td',
+  'th',
+  'thead',
+  'tr',
+  'ul',
+  'var',
 ]
 
 const schema: Schema = {
@@ -23,6 +64,8 @@ const schema: Schema = {
     ...defaultSchema.attributes,
     a: ['href', 'title'],
     img: ['src', 'alt', 'title'],
+    // Preserve remark-math placeholders so rehype-katex can render them.
+    code: [['className', /^language-./, 'math-inline', 'math-display']],
   },
   protocols: {
     href: ['http', 'https', 'mailto'],
@@ -77,11 +120,14 @@ export function CourseMarkdown({
   return (
     <div className="markdown">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeRaw, [rehypeSanitize, schema]]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeRaw, [rehypeSanitize, schema], rehypeKatex]}
         components={{
           pre: ({ children }) => {
-            if (!isValidElement<{ className?: string; children?: ReactNode }>(children) || children.type !== 'code') {
+            if (
+              !isValidElement<{ className?: string; children?: ReactNode }>(children) ||
+              children.type !== 'code'
+            ) {
               return <pre>{children}</pre>
             }
             const className = children.props.className || ''

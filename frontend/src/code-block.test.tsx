@@ -38,7 +38,7 @@ describe('reader code blocks', () => {
       />,
     )
     expect(container.querySelector('.token.keyword')).toHaveTextContent('def')
-    expect(container.querySelector('pre')).toHaveStyle({ whiteSpace: 'pre' })
+    expect(container.querySelector('pre')).toHaveStyle({ whiteSpace: 'pre-wrap' })
     expect(screen.getByText('Python')).toBeInTheDocument()
   })
 
@@ -57,9 +57,16 @@ describe('reader code blocks', () => {
     )
 
     expect(container.querySelector('.token.keyword')).toHaveTextContent('return')
-    expect(() => rerender(
-      <CodeBlock code="if test -f app.py; then echo ready; fi" language="bash" theme="dark" {...labels} />,
-    )).not.toThrow()
+    expect(() =>
+      rerender(
+        <CodeBlock
+          code="if test -f app.py; then echo ready; fi"
+          language="bash"
+          theme="dark"
+          {...labels}
+        />,
+      ),
+    ).not.toThrow()
     expect(container.querySelector('.code-block-source')).toHaveTextContent('if test -f app.py')
     await waitFor(() => expect(container.querySelector('.prism-code')).toBeInTheDocument())
   })

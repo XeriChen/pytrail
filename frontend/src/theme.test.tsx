@@ -1,11 +1,6 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  THEME_STORAGE_KEY,
-  readThemePreference,
-  useTheme,
-  writeThemePreference,
-} from './theme'
+import { THEME_STORAGE_KEY, readThemePreference, useTheme, writeThemePreference } from './theme'
 
 type ChangeListener = (event: MediaQueryListEvent) => void
 
@@ -25,11 +20,17 @@ function installMatchMedia(initiallyDark: boolean) {
     dispatchEvent: () => true,
   } as MediaQueryList
 
-  vi.stubGlobal('matchMedia', vi.fn(() => media))
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn(() => media),
+  )
   return {
     dispatch(nextDark: boolean) {
       matches = nextDark
-      const event = { matches: nextDark, media: media.media } as MediaQueryListEvent
+      const event = {
+        matches: nextDark,
+        media: media.media,
+      } as MediaQueryListEvent
       listeners.forEach((listener) => listener(event))
     },
   }
@@ -57,8 +58,20 @@ describe('theme preference', () => {
   })
 
   it('tolerates unavailable storage', () => {
-    expect(readThemePreference({ getItem: () => { throw new Error('blocked') } })).toBeNull()
-    expect(() => writeThemePreference('dark', { setItem: () => { throw new Error('blocked') } })).not.toThrow()
+    expect(
+      readThemePreference({
+        getItem: () => {
+          throw new Error('blocked')
+        },
+      }),
+    ).toBeNull()
+    expect(() =>
+      writeThemePreference('dark', {
+        setItem: () => {
+          throw new Error('blocked')
+        },
+      }),
+    ).not.toThrow()
   })
 
   it('follows system changes until the user selects a theme', () => {
@@ -89,16 +102,26 @@ describe('theme preference', () => {
 
   it('falls back to the legacy media listener when the modern API throws', () => {
     let listener: ChangeListener | undefined
-    vi.stubGlobal('matchMedia', vi.fn(() => ({
-      matches: true,
-      media: '(prefers-color-scheme: dark)',
-      onchange: null,
-      addEventListener: () => { throw new Error('unsupported') },
-      removeEventListener: vi.fn(),
-      addListener: (next: ChangeListener) => { listener = next },
-      removeListener: vi.fn(),
-      dispatchEvent: () => true,
-    } as MediaQueryList)))
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(
+        () =>
+          ({
+            matches: true,
+            media: '(prefers-color-scheme: dark)',
+            onchange: null,
+            addEventListener: () => {
+              throw new Error('unsupported')
+            },
+            removeEventListener: vi.fn(),
+            addListener: (next: ChangeListener) => {
+              listener = next
+            },
+            removeListener: vi.fn(),
+            dispatchEvent: () => true,
+          }) as MediaQueryList,
+      ),
+    )
 
     const { result } = renderHook(() => useTheme())
     act(() => listener?.({ matches: false } as MediaQueryListEvent))

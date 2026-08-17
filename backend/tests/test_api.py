@@ -7,18 +7,18 @@ import sys
 import tempfile
 import unittest
 import warnings
-from unittest.mock import patch
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from itertools import count
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-_DB = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-_DB.close()
-os.environ["DATABASE_URL"] = f"sqlite:///{Path(_DB.name).as_posix()}"
+with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as temp_database:
+    _DB_PATH = Path(temp_database.name)
+os.environ["DATABASE_URL"] = f"sqlite:///{_DB_PATH.as_posix()}"
 os.environ["SECRET_KEY"] = f"unit-test-secret-{os.urandom(8).hex()}"
 os.environ["PYTRAIL_ENV"] = "development"
 
@@ -27,14 +27,16 @@ from sqlalchemy import select  # noqa: E402
 
 from app.auth import (  # noqa: E402
     KNOWN_INSECURE_SECRETS,
+    USERLESS_MODE_ENV,
     enforce_secret_key_policy,
     is_insecure_secret,
     is_production_environment,
+    is_userless_mode,
 )
 from app.database import SessionLocal, engine  # noqa: E402
 from app.main import app  # noqa: E402
 from app.metrics import compute_streak  # noqa: E402
-from app.models import Exercise, ExerciseProgress, Progress  # noqa: E402
+from app.models import Exercise, ExerciseProgress, Progress, User  # noqa: E402
 from app.ratelimit import auth_limiter, practice_limiter  # noqa: E402
 
 _EMAILS = count(1)
@@ -54,13 +56,15 @@ class ApiTests(unittest.TestCase):
     def tearDownClass(cls) -> None:
         cls.client_cm.__exit__(None, None, None)
         engine.dispose()
-        Path(_DB.name).unlink(missing_ok=True)
+        _DB_PATH.unlink(missing_ok=True)
 
     def setUp(self) -> None:
         auth_limiter.reset()
         practice_limiter.reset()
 
-    def register(self, email: str | None = None, password: str = "password123", name: str = "Ada") -> dict:
+    def register(
+        self, email: str | None = None, password: str = "password123", name: str = "Ada"
+    ) -> dict:
         payload = {"name": name, "email": email or unique_email(), "password": password}
         response = self.client.post("/api/auth/register", json=payload)
         self.assertEqual(response.status_code, 201, response.text)
@@ -75,6 +79,72 @@ class ApiTests(unittest.TestCase):
         response = self.client.get("/api/health")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "ok")
+
+    def test_userless_mode_is_opt_in(self) -> None:
+        self.assertFalse(is_userless_mode())
+        self.assertEqual(
+            self.client.get("/api/config").json(), {"userless_mode": False}
+        )
+        with patch.dict(os.environ, {USERLESS_MODE_ENV: "1"}):
+            self.assertTrue(is_userless_mode())
+            self.assertEqual(
+                self.client.get("/api/config").json(), {"userless_mode": True}
+            )
+
+    def test_userless_mode_runs_without_auth_and_does_not_persist_progress(
+        self,
+    ) -> None:
+        code = "def filter_and_square(numbers, minimum):\n    return [number * number for number in numbers if number >= minimum]\n"
+        with SessionLocal() as db:
+            exercise_progress_before = len(db.scalars(select(ExerciseProgress)).all())
+            lesson_progress_before = len(db.scalars(select(Progress)).all())
+            users_before = len(db.scalars(select(User)).all())
+        with patch.dict(os.environ, {USERLESS_MODE_ENV: "1"}):
+            self.assertEqual(
+                self.client.post(
+                    "/api/auth/register",
+                    json={
+                        "name": "Ada",
+                        "email": unique_email(),
+                        "password": "password123",
+                    },
+                ).status_code,
+                404,
+            )
+            run = self.client.post(
+                "/api/practice/exercises/filter-and-square/run", json={"code": code}
+            )
+            self.assertEqual(run.status_code, 200, run.text)
+            self.assertTrue(run.json()["passed"])
+            self.assertIsNone(run.json()["progress"])
+
+            lesson = self.client.get("/api/lessons/1").json()
+            exercise_id = lesson["exercises"][0]["id"]
+            quick_check = self.client.post(
+                f"/api/exercises/{exercise_id}/submit", json={"answer": "wrong"}
+            )
+            self.assertEqual(quick_check.status_code, 200, quick_check.text)
+            self.assertFalse(quick_check.json()["correct"])
+            self.assertFalse(quick_check.json()["persisted"])
+
+            progress = self.client.post(
+                "/api/progress",
+                json={"lesson_id": lesson["id"], "completed": True, "score": 100},
+            )
+            self.assertEqual(progress.status_code, 200, progress.text)
+            self.assertFalse(progress.json()["persisted"])
+            self.assertEqual(self.client.get("/api/auth/me").status_code, 404)
+            self.assertEqual(self.client.get("/api/dashboard").status_code, 404)
+
+        with SessionLocal() as db:
+            self.assertEqual(
+                len(db.scalars(select(ExerciseProgress)).all()),
+                exercise_progress_before,
+            )
+            self.assertEqual(
+                len(db.scalars(select(Progress)).all()), lesson_progress_before
+            )
+            self.assertEqual(len(db.scalars(select(User)).all()), users_before)
 
     def test_lifespan_releases_startup_session_before_serving(self) -> None:
         with TestClient(app) as client:
@@ -115,10 +185,23 @@ class ApiTests(unittest.TestCase):
         self.assertIsNone(catalog["items"][0]["progress"])
         self.assertEqual(len(catalog["facets"]["courses"]), 9)
 
-        filtered = self.client.get("/api/practice/exercises", params={"course": "python-foundations", "difficulty": "easy", "tag": "loops", "page_size": 48})
+        filtered = self.client.get(
+            "/api/practice/exercises",
+            params={
+                "course": "python-foundations",
+                "difficulty": "easy",
+                "tag": "loops",
+                "page_size": 48,
+            },
+        )
         self.assertEqual(filtered.status_code, 200, filtered.text)
         self.assertGreater(filtered.json()["total"], 0)
-        self.assertTrue(all(item["course"]["slug"] == "python-foundations" for item in filtered.json()["items"]))
+        self.assertTrue(
+            all(
+                item["course"]["slug"] == "python-foundations"
+                for item in filtered.json()["items"]
+            )
+        )
 
         detail = self.client.get("/api/practice/exercises/prime-range-summary")
         self.assertEqual(detail.status_code, 200, detail.text)
@@ -127,36 +210,73 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(len(payload["cases"]), 4)
         self.assertIn("expected", payload["cases"][0])
         self.assertNotIn("expected_answer", payload)
-        self.assertEqual(self.client.get("/api/practice/exercises/not-found").status_code, 404)
-        self.assertEqual(self.client.get("/api/practice/exercises", params={"difficulty": "expert"}).status_code, 422)
-        self.assertEqual(self.client.get("/api/practice/exercises", params={"status": "passed"}).status_code, 401)
+        self.assertEqual(
+            self.client.get("/api/practice/exercises/not-found").status_code, 404
+        )
+        self.assertEqual(
+            self.client.get(
+                "/api/practice/exercises", params={"difficulty": "expert"}
+            ).status_code,
+            422,
+        )
+        self.assertEqual(
+            self.client.get(
+                "/api/practice/exercises", params={"status": "passed"}
+            ).status_code,
+            401,
+        )
 
     def test_practice_run_requires_auth_and_persists_monotonic_progress(self) -> None:
         slug = "filter-and-square"
-        self.assertEqual(self.client.post(f"/api/practice/exercises/{slug}/run", json={"code": "def x(): pass"}).status_code, 401)
+        self.assertEqual(
+            self.client.post(
+                f"/api/practice/exercises/{slug}/run", json={"code": "def x(): pass"}
+            ).status_code,
+            401,
+        )
         auth = self.register()
-        starter_code = self.client.get(f"/api/practice/exercises/{slug}").json()["starter_code"]
+        starter_code = self.client.get(f"/api/practice/exercises/{slug}").json()[
+            "starter_code"
+        ]
         failed_code = "def filter_and_square(numbers, minimum):\n    return []\n"
-        failed = self.client.post(f"/api/practice/exercises/{slug}/run", headers=auth["headers"], json={"code": failed_code})
+        failed = self.client.post(
+            f"/api/practice/exercises/{slug}/run",
+            headers=auth["headers"],
+            json={"code": failed_code},
+        )
         self.assertEqual(failed.status_code, 200, failed.text)
         self.assertFalse(failed.json()["passed"])
         self.assertEqual(failed.json()["progress"]["status"], "in_progress")
         self.assertEqual(failed.json()["progress"]["attempts"], 1)
 
         passed_code = "def filter_and_square(numbers, minimum):\n    return [value * value for value in numbers if value >= minimum]\n"
-        passed = self.client.post(f"/api/practice/exercises/{slug}/run", headers=auth["headers"], json={"code": passed_code})
+        passed = self.client.post(
+            f"/api/practice/exercises/{slug}/run",
+            headers=auth["headers"],
+            json={"code": passed_code},
+        )
         self.assertEqual(passed.status_code, 200, passed.text)
         self.assertTrue(passed.json()["passed"], passed.text)
         self.assertEqual(passed.json()["progress"]["status"], "passed")
 
-        again = self.client.post(f"/api/practice/exercises/{slug}/run", headers=auth["headers"], json={"code": failed_code})
+        again = self.client.post(
+            f"/api/practice/exercises/{slug}/run",
+            headers=auth["headers"],
+            json={"code": failed_code},
+        )
         self.assertEqual(again.json()["progress"]["status"], "passed")
         self.assertEqual(again.json()["progress"]["attempts"], 3)
-        resumed = self.client.get(f"/api/practice/exercises/{slug}", headers=auth["headers"]).json()
+        resumed = self.client.get(
+            f"/api/practice/exercises/{slug}", headers=auth["headers"]
+        ).json()
         self.assertEqual(resumed["starter_code"], starter_code)
         self.assertEqual(resumed["progress"]["last_code"], failed_code)
 
-        status = self.client.get("/api/practice/exercises", headers=auth["headers"], params={"status": "passed", "page_size": 48})
+        status = self.client.get(
+            "/api/practice/exercises",
+            headers=auth["headers"],
+            params={"status": "passed", "page_size": 48},
+        )
         self.assertEqual(status.status_code, 200, status.text)
         self.assertIn(slug, [item["slug"] for item in status.json()["items"]])
 
@@ -165,7 +285,11 @@ class ApiTests(unittest.TestCase):
         with SessionLocal() as db:
             exercise = db.scalar(select(Exercise).where(Exercise.kind == "function"))
             exercise_id = exercise.id
-        response = self.client.post(f"/api/exercises/{exercise_id}/submit", headers=auth["headers"], json={"answer": "x"})
+        response = self.client.post(
+            f"/api/exercises/{exercise_id}/submit",
+            headers=auth["headers"],
+            json={"answer": "x"},
+        )
         self.assertEqual(response.status_code, 404)
 
     def test_practice_validation_limits_and_runner_failure_are_bounded(self) -> None:
@@ -181,7 +305,9 @@ class ApiTests(unittest.TestCase):
         invalid = self.client.post(
             f"/api/practice/exercises/{slug}/run",
             headers=auth["headers"],
-            json={"code": "import os\ndef filter_and_square(numbers, minimum): return []"},
+            json={
+                "code": "import os\ndef filter_and_square(numbers, minimum): return []"
+            },
         )
         self.assertEqual(invalid.status_code, 200, invalid.text)
         self.assertFalse(invalid.json()["ok"])
@@ -196,7 +322,12 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(unavailable.status_code, 503)
         with SessionLocal() as db:
             exercise = db.scalar(select(Exercise).where(Exercise.slug == slug))
-            progress = db.scalar(select(ExerciseProgress).where(ExerciseProgress.user_id == auth["user"]["id"], ExerciseProgress.exercise_id == exercise.id))
+            progress = db.scalar(
+                select(ExerciseProgress).where(
+                    ExerciseProgress.user_id == auth["user"]["id"],
+                    ExerciseProgress.exercise_id == exercise.id,
+                )
+            )
             self.assertEqual(progress.attempts, 1)
 
     def test_catalog_errors_and_assets_are_safe(self) -> None:
@@ -207,17 +338,29 @@ class ApiTests(unittest.TestCase):
         lesson = self.client.get(f"/api/lessons/{second['lessons'][0]['id']}").json()
         self.assertEqual(lesson["exercises"], [])
 
-        asset = self.client.get("/api/course-assets/python-foundations/res/day01/tiobe_index.png")
+        asset = self.client.get(
+            "/api/course-assets/python-foundations/res/day01/tiobe_index.png"
+        )
         self.assertEqual(asset.status_code, 200)
         self.assertEqual(asset.headers["content-type"], "image/png")
-        self.assertEqual(self.client.get("/api/course-assets/not-a-course/res/a.png").status_code, 404)
-        self.assertEqual(self.client.get("/api/course-assets/python-foundations/%2E%2E/01.%E5%88%9D%E8%AF%86Python.md").status_code, 404)
+        self.assertEqual(
+            self.client.get("/api/course-assets/not-a-course/res/a.png").status_code,
+            404,
+        )
+        self.assertEqual(
+            self.client.get(
+                "/api/course-assets/python-foundations/%2E%2E/01.%E5%88%9D%E8%AF%86Python.md"
+            ).status_code,
+            404,
+        )
 
     def test_execute_disabled_by_default(self) -> None:
         response = self.client.post("/api/execute", json={"code": "print(1)"})
         self.assertEqual(response.status_code, 404)
         auth = self.register()
-        response = self.client.post("/api/execute", json={"code": "print(1)"}, headers=auth["headers"])
+        response = self.client.post(
+            "/api/execute", json={"code": "print(1)"}, headers=auth["headers"]
+        )
         self.assertEqual(response.status_code, 404)
 
     def test_execute_requires_auth_when_enabled(self) -> None:
@@ -230,7 +373,11 @@ class ApiTests(unittest.TestCase):
         auth = self.register()
         marker = "pytrail-hello-stdout"
         with patch.dict(os.environ, {"PYTRAIL_ENABLE_LEGACY_EXECUTE": "1"}):
-            response = self.client.post("/api/execute", json={"code": f"print({marker!r})"}, headers=auth["headers"])
+            response = self.client.post(
+                "/api/execute",
+                json={"code": f"print({marker!r})"},
+                headers=auth["headers"],
+            )
         self.assertEqual(response.status_code, 200, response.text)
         body = response.json()
         self.assertTrue(body["ok"])
@@ -239,13 +386,20 @@ class ApiTests(unittest.TestCase):
     def test_execute_rejects_oversize_code_when_enabled(self) -> None:
         auth = self.register()
         with patch.dict(os.environ, {"PYTRAIL_ENABLE_LEGACY_EXECUTE": "1"}):
-            response = self.client.post("/api/execute", json={"code": "x" * 4001}, headers=auth["headers"])
+            response = self.client.post(
+                "/api/execute", json={"code": "x" * 4001}, headers=auth["headers"]
+            )
         self.assertEqual(response.status_code, 413)
 
     def test_execute_unavailable_in_production_even_when_enabled(self) -> None:
         auth = self.register()
-        with patch.dict(os.environ, {"PYTRAIL_ENABLE_LEGACY_EXECUTE": "1", "PYTRAIL_ENV": "production"}):
-            response = self.client.post("/api/execute", json={"code": "print(1)"}, headers=auth["headers"])
+        with patch.dict(
+            os.environ,
+            {"PYTRAIL_ENABLE_LEGACY_EXECUTE": "1", "PYTRAIL_ENV": "production"},
+        ):
+            response = self.client.post(
+                "/api/execute", json={"code": "print(1)"}, headers=auth["headers"]
+            )
         self.assertEqual(response.status_code, 404)
 
     def test_execute_timeout_fails_closed_when_enabled(self) -> None:
@@ -273,7 +427,9 @@ class ApiTests(unittest.TestCase):
     def test_progress_upsert_updates_a_single_row(self) -> None:
         auth = self.register()
         courses = self.client.get("/api/courses").json()
-        lesson_id = self.client.get(f"/api/courses/{courses[0]['id']}").json()["lessons"][0]["id"]
+        lesson_id = self.client.get(f"/api/courses/{courses[0]['id']}").json()[
+            "lessons"
+        ][0]["id"]
         first = self.client.post(
             "/api/progress",
             json={"lesson_id": lesson_id, "completed": True, "score": 100},
@@ -288,7 +444,9 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(second.status_code, 200, second.text)
         self.assertFalse(second.json()["completed"])
         with SessionLocal() as db:
-            rows = db.scalars(select(Progress).where(Progress.user_id == auth["user"]["id"])).all()
+            rows = db.scalars(
+                select(Progress).where(Progress.user_id == auth["user"]["id"])
+            ).all()
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0].score, 37)
 
@@ -306,7 +464,9 @@ class ApiTests(unittest.TestCase):
         self.assertFalse(wrong.json()["correct"])
         self.assertEqual(wrong.json()["score"], 40)
         with SessionLocal() as db:
-            rows = db.scalars(select(Progress).where(Progress.user_id == auth["user"]["id"])).all()
+            rows = db.scalars(
+                select(Progress).where(Progress.user_id == auth["user"]["id"])
+            ).all()
             self.assertEqual(len(rows), 1)
             self.assertFalse(rows[0].completed)
 
@@ -315,7 +475,9 @@ class ApiTests(unittest.TestCase):
 
         auth = self.register()
         courses = self.client.get("/api/courses").json()
-        lesson_id = self.client.get(f"/api/courses/{courses[0]['id']}").json()["lessons"][1]["id"]
+        lesson_id = self.client.get(f"/api/courses/{courses[0]['id']}").json()[
+            "lessons"
+        ][1]["id"]
         barrier = threading.Barrier(6)
         statuses: list[int] = []
 
@@ -335,34 +497,58 @@ class ApiTests(unittest.TestCase):
             item.join()
         self.assertEqual(statuses, [200] * 6)
         with SessionLocal() as db:
-            rows = db.scalars(select(Progress).where(Progress.user_id == auth["user"]["id"])).all()
+            rows = db.scalars(
+                select(Progress).where(Progress.user_id == auth["user"]["id"])
+            ).all()
             self.assertEqual(len(rows), 1)
 
     def test_sqlite_foreign_keys_are_enforced(self) -> None:
         from sqlalchemy.exc import IntegrityError
 
         with engine.connect() as connection:
-            self.assertEqual(connection.exec_driver_sql("PRAGMA foreign_keys").scalar(), 1)
+            self.assertEqual(
+                connection.exec_driver_sql("PRAGMA foreign_keys").scalar(), 1
+            )
         auth = self.register()
         with SessionLocal() as db:
             with self.assertRaises(IntegrityError):
-                db.add(Progress(user_id=auth["user"]["id"], lesson_id=999_999, completed=True, score=100))
+                db.add(
+                    Progress(
+                        user_id=auth["user"]["id"],
+                        lesson_id=999_999,
+                        completed=True,
+                        score=100,
+                    )
+                )
                 db.commit()
             db.rollback()
 
     def test_register_normalizes_email_and_rejects_blank_name(self) -> None:
         response = self.client.post(
             "/api/auth/register",
-            json={"name": "  Ada  ", "email": "  ADA@Example.COM  ", "password": "password123"},
+            json={
+                "name": "  Ada  ",
+                "email": "  ADA@Example.COM  ",
+                "password": "password123",
+            },
         )
         self.assertEqual(response.status_code, 201, response.text)
         self.assertEqual(response.json()["user"]["email"], "ada@example.com")
         self.assertEqual(response.json()["user"]["name"], "Ada")
-        login = self.client.post("/api/auth/login", json={"email": "ADA@example.com", "password": "password123"})
+        login = self.client.post(
+            "/api/auth/login",
+            json={"email": "ADA@example.com", "password": "password123"},
+        )
         self.assertEqual(login.status_code, 200, login.text)
-        blank = self.client.post("/api/auth/register", json={"name": "   ", "email": unique_email(), "password": "password123"})
+        blank = self.client.post(
+            "/api/auth/register",
+            json={"name": "   ", "email": unique_email(), "password": "password123"},
+        )
         self.assertEqual(blank.status_code, 422)
-        short_password = self.client.post("/api/auth/register", json={"name": "Ada", "email": unique_email(), "password": "short"})
+        short_password = self.client.post(
+            "/api/auth/register",
+            json={"name": "Ada", "email": unique_email(), "password": "short"},
+        )
         self.assertEqual(short_password.status_code, 422)
 
     def test_register_rejects_oversized_fields(self) -> None:
@@ -373,7 +559,11 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         response = self.client.post(
             "/api/auth/register",
-            json={"name": "Ada", "email": f"{'a' * 160}@example.com", "password": "password123"},
+            json={
+                "name": "Ada",
+                "email": f"{'a' * 160}@example.com",
+                "password": "password123",
+            },
         )
         self.assertEqual(response.status_code, 422)
         response = self.client.post(
@@ -430,13 +620,18 @@ class ApiTests(unittest.TestCase):
             enforce_secret_key_policy(secret="x" * 15, environment="production")
         acceptable = "x" * 16
         self.assertFalse(is_insecure_secret(acceptable))
-        self.assertEqual(enforce_secret_key_policy(secret=acceptable, environment="production"), acceptable)
+        self.assertEqual(
+            enforce_secret_key_policy(secret=acceptable, environment="production"),
+            acceptable,
+        )
 
     def test_login_burst_is_rate_limited(self) -> None:
         email = unique_email()
         self.register(email=email)
         statuses = [
-            self.client.post("/api/auth/login", json={"email": email, "password": "wrong-password"}).status_code
+            self.client.post(
+                "/api/auth/login", json={"email": email, "password": "wrong-password"}
+            ).status_code
             for _ in range(8)
         ]
         self.assertIn(429, statuses)
@@ -446,7 +641,11 @@ class ApiTests(unittest.TestCase):
         statuses = [
             self.client.post(
                 "/api/auth/register",
-                json={"name": "Burst", "email": unique_email(), "password": "password123"},
+                json={
+                    "name": "Burst",
+                    "email": unique_email(),
+                    "password": "password123",
+                },
             ).status_code
             for _ in range(8)
         ]
@@ -489,10 +688,12 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(yesterday_progress.status_code, 200)
         db = SessionLocal()
         try:
-            rows = db.scalars(select(Progress).where(Progress.user_id == auth["user"]["id"])).all()
+            rows = db.scalars(
+                select(Progress).where(Progress.user_id == auth["user"]["id"])
+            ).all()
             self.assertEqual(len(rows), 2)
             older = next(item for item in rows if item.lesson_id == second_id)
-            older.updated_at = datetime.now(timezone.utc) - timedelta(days=1)
+            older.updated_at = datetime.now(UTC) - timedelta(days=1)
             db.commit()
         finally:
             db.close()
@@ -506,7 +707,9 @@ class ApiTests(unittest.TestCase):
         today = date(2026, 8, 13)
         self.assertEqual(compute_streak([], today=today), 0)
         self.assertEqual(compute_streak([today], today=today), 1)
-        self.assertEqual(compute_streak([today, today - timedelta(days=1)], today=today), 2)
+        self.assertEqual(
+            compute_streak([today, today - timedelta(days=1)], today=today), 2
+        )
         self.assertEqual(compute_streak([today - timedelta(days=3)], today=today), 0)
         self.assertNotEqual(compute_streak([today], today=today), 4)
 
@@ -518,10 +721,14 @@ class ApiTests(unittest.TestCase):
             enforce_secret_key_policy(secret=insecure, environment="production")
         unique = f"rotated-secret-{os.urandom(8).hex()}"
         self.assertFalse(is_insecure_secret(unique))
-        self.assertEqual(enforce_secret_key_policy(secret=unique, environment="production"), unique)
+        self.assertEqual(
+            enforce_secret_key_policy(secret=unique, environment="production"), unique
+        )
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            returned = enforce_secret_key_policy(secret=insecure, environment="development")
+            returned = enforce_secret_key_policy(
+                secret=insecure, environment="development"
+            )
         self.assertEqual(returned, insecure)
         self.assertTrue(any(issubclass(item.category, UserWarning) for item in caught))
 

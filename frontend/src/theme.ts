@@ -27,9 +27,7 @@ function colorSchemeQuery(): MediaQueryList | null {
   }
 }
 
-export function readThemePreference(
-  storage: Pick<Storage, 'getItem'> | null,
-): Theme | null {
+export function readThemePreference(storage: Pick<Storage, 'getItem'> | null): Theme | null {
   try {
     const value = storage?.getItem(THEME_STORAGE_KEY)
     return isTheme(value) ? value : null
@@ -38,10 +36,7 @@ export function readThemePreference(
   }
 }
 
-export function writeThemePreference(
-  theme: Theme,
-  storage: Pick<Storage, 'setItem'> | null,
-): void {
+export function writeThemePreference(theme: Theme, storage: Pick<Storage, 'setItem'> | null): void {
   try {
     storage?.setItem(THEME_STORAGE_KEY, theme)
   } catch {

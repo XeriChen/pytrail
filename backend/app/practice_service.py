@@ -11,7 +11,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session, selectinload
 
 from .course_sync import COURSE_SPECS
-from .models import Course, Exercise, ExerciseProgress, Lesson, User, utc_now
+from .models import Exercise, ExerciseProgress, Lesson, User, utc_now
 from .schemas import (
     PracticeCaseOut,
     PracticeCatalogOut,
@@ -23,7 +23,6 @@ from .schemas import (
     PracticeProgressOut,
     PracticeSignatureOut,
 )
-
 
 DIFFICULTIES = frozenset({"easy", "medium", "hard"})
 STATUSES = frozenset({"not_started", "in_progress", "passed"})
@@ -42,7 +41,13 @@ def _rows(db: Session) -> list[Exercise]:
             )
         ).unique()
     )
-    rows.sort(key=lambda item: (COURSE_ORDER.get(item.lesson.course.slug, 999), item.lesson.order, item.order))
+    rows.sort(
+        key=lambda item: (
+            COURSE_ORDER.get(item.lesson.course.slug, 999),
+            item.lesson.order,
+            item.order,
+        )
+    )
     return rows
 
 
@@ -51,12 +56,18 @@ def _progress_map(db: Session, user: User | None) -> dict[int, ExerciseProgress]
         return {}
     return {
         item.exercise_id: item
-        for item in db.scalars(select(ExerciseProgress).where(ExerciseProgress.user_id == user.id))
+        for item in db.scalars(
+            select(ExerciseProgress).where(ExerciseProgress.user_id == user.id)
+        )
     }
 
 
 def _progress_out(progress: ExerciseProgress | None) -> PracticeProgressOut | None:
-    return PracticeProgressOut.model_validate(progress, from_attributes=True) if progress else None
+    return (
+        PracticeProgressOut.model_validate(progress, from_attributes=True)
+        if progress
+        else None
+    )
 
 
 def _summary(row: Exercise, progress: ExerciseProgress | None) -> PracticeExerciseOut:
@@ -65,8 +76,14 @@ def _summary(row: Exercise, progress: ExerciseProgress | None) -> PracticeExerci
         title=row.title,
         difficulty=row.difficulty or "easy",
         tags=sorted(tag.slug for tag in row.tags),
-        course=PracticeCourseOut(id=row.lesson.course.id, slug=row.lesson.course.slug, title=row.lesson.course.title),
-        lesson=PracticeLessonOut(id=row.lesson.id, title=row.lesson.title, order=row.lesson.order),
+        course=PracticeCourseOut(
+            id=row.lesson.course.id,
+            slug=row.lesson.course.slug,
+            title=row.lesson.course.title,
+        ),
+        lesson=PracticeLessonOut(
+            id=row.lesson.id, title=row.lesson.title, order=row.lesson.order
+        ),
         progress=_progress_out(progress),
     )
 
@@ -102,7 +119,8 @@ def list_exercises(
         rows = [
             row
             for row in rows
-            if (progress[row.id].status if row.id in progress else "not_started") == status
+            if (progress[row.id].status if row.id in progress else "not_started")
+            == status
         ]
 
     total = len(rows)
@@ -112,12 +130,19 @@ def list_exercises(
     tags: set[str] = set()
     for row in all_rows:
         courses[row.lesson.course.id] = PracticeCourseOut(
-            id=row.lesson.course.id, slug=row.lesson.course.slug, title=row.lesson.course.title
+            id=row.lesson.course.id,
+            slug=row.lesson.course.slug,
+            title=row.lesson.course.title,
         )
-        lessons[row.lesson.id] = PracticeLessonOut(id=row.lesson.id, title=row.lesson.title, order=row.lesson.order)
+        lessons[row.lesson.id] = PracticeLessonOut(
+            id=row.lesson.id, title=row.lesson.title, order=row.lesson.order
+        )
         tags.update(item.slug for item in row.tags)
     return PracticeCatalogOut(
-        items=[_summary(row, progress.get(row.id)) for row in rows[start : start + page_size]],
+        items=[
+            _summary(row, progress.get(row.id))
+            for row in rows[start : start + page_size]
+        ],
         total=total,
         page=page,
         page_size=page_size,
@@ -142,7 +167,9 @@ def get_exercise(db: Session, slug: str) -> Exercise | None:
     )
 
 
-def exercise_detail(db: Session, exercise: Exercise, user: User | None) -> PracticeDetailOut:
+def exercise_detail(
+    db: Session, exercise: Exercise, user: User | None
+) -> PracticeDetailOut:
     progress = None
     if user is not None:
         progress = db.scalar(
@@ -174,14 +201,18 @@ def exercise_detail(db: Session, exercise: Exercise, user: User | None) -> Pract
     )
 
 
-def record_run(db: Session, user: User, exercise: Exercise, code: str, passed: bool) -> ExerciseProgress:
+def record_run(
+    db: Session, user: User, exercise: Exercise, code: str, passed: bool
+) -> ExerciseProgress:
     dialect = db.get_bind().dialect.name
     if dialect == "sqlite":
         statement = sqlite_insert(ExerciseProgress)
     elif dialect == "postgresql":
         statement = postgresql_insert(ExerciseProgress)
     else:
-        raise RuntimeError(f"Unsupported database dialect for practice progress: {dialect}")
+        raise RuntimeError(
+            f"Unsupported database dialect for practice progress: {dialect}"
+        )
 
     statement = statement.values(
         user_id=user.id,

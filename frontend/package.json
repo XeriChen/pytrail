@@ -2,16 +2,20 @@
   "name": "pytrail-web",
   "private": true,
   "version": "1.0.0",
+  "packageManager": "pnpm@11.19.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint": "oxlint src --deny-warnings",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx}\" vite.config.ts"
   },
   "dependencies": {
     "@codemirror/lang-python": "^6.2.1",
     "@uiw/react-codemirror": "^4.25.11",
+    "katex": "^0.18.4",
     "lucide-react": "^1.31.0",
     "mermaid": "^11.16.1",
     "prism-react-renderer": "^2.4.1",
@@ -20,20 +24,24 @@
     "react-dom": "^19.2.8",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.18.2",
+    "rehype-katex": "^7.0.0",
     "rehype-raw": "^7.0.0",
     "rehype-sanitize": "^6.0.0",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.2",
-    "@types/node": "^24.0.0",
+    "@types/node": "^26.2.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.0.5",
     "jsdom": "^30.0.1",
+    "oxlint": "^1.78.0",
+    "prettier": "^3.9.6",
     "typescript": "^7.0.2",
     "vite": "^8.2.1",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.10"
   }
 }

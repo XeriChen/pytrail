@@ -61,7 +61,7 @@
 
 - 内容解析和清单校验必须在数据库写入前完成；同步失败必须保留上一个完整目录。
 - 公开列表和详情不能泄露速测答案、服务端秘密或未公开运行器信息。
-- 练习执行必须保持鉴权、速率限制、源码限制、总超时和独立子进程边界。
+- 练习执行默认必须保持鉴权；启用 `PYTRAIL_USERLESS_MODE` 时允许匿名执行，但仍必须保持 IP 速率限制、源码限制、总超时和独立子进程边界。
 - 不要把 `/api/execute` 用作练习场运行器。它是旧课内演示接口，默认返回 404；只有设置 `PYTRAIL_ENABLE_LEGACY_EXECUTE=1` 且非生产环境时才启用，隔离强度低，仅限本地演示。
 - 数据库写入需要显式事务语义。练习进度的并发更新必须保持原子 upsert 和通过状态不降级。
 - 新增数据库方言时，要同步实现和验证 `record_run` 的 upsert 逻辑；当前只支持 SQLite 和 PostgreSQL。
@@ -76,17 +76,21 @@ uv run uvicorn app.main:app --reload --port 8000
 
 # Web
 cd frontend
-npm ci
-npm run dev
+pnpm install --frozen-lockfile
+pnpm dev
 
 # Backend verification
 cd backend
+uv run ruff check app tests
+uv run ruff format --check app tests
 uv run python -m unittest discover -s tests -v
 
 # Frontend verification
 cd frontend
-npm test
-npm run build
+pnpm lint
+pnpm format:check
+pnpm test
+pnpm build
 ```
 
 ## 浏览器验收（Playwright）

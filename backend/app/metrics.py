@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 
 def as_utc_date(value: datetime) -> date:
     if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc).date()
+        value = value.replace(tzinfo=UTC)
+    return value.astimezone(UTC).date()
 
 
 def compute_streak(activity_dates: list[date], today: date | None = None) -> int:
@@ -17,7 +17,7 @@ def compute_streak(activity_dates: list[date], today: date | None = None) -> int
     A gap of more than one day from `today` resets the streak to 0. Activity
     yesterday with nothing yet today still counts (the current day is open).
     """
-    today = today or datetime.now(timezone.utc).date()
+    today = today or datetime.now(UTC).date()
     days = sorted(set(activity_dates), reverse=True)
     if not days:
         return 0

@@ -5,17 +5,18 @@ from __future__ import annotations
 import ast
 import json
 import os
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-
 MAX_SOURCE_BYTES = 12_000
 MAX_PAYLOAD_BYTES = 96_000
 MAX_OUTPUT_BYTES = 96_000
 RUN_TIMEOUT_SECONDS = 2.0
+PRACTICE_PYTHON_ENV = "PYTRAIL_PRACTICE_PYTHON"
 
 
 class PracticeRunError(ValueError):
@@ -70,6 +71,33 @@ BLOCKED_CALLS = frozenset(
 )
 
 
+def resolve_practice_python() -> str:
+    """Resolve the interpreter used by the restricted worker subprocess.
+
+    The API interpreter remains the default. A deployment running directly on
+    the host can temporarily select another local Python installation without
+    invoking a shell or changing the worker's isolation flags.
+    """
+    configured = os.getenv(PRACTICE_PYTHON_ENV, "").strip()
+    if not configured:
+        return sys.executable
+
+    expanded = os.path.expandvars(os.path.expanduser(configured))
+    candidate = Path(expanded)
+    if candidate.is_absolute() or candidate.parent != Path("."):
+        resolved = candidate.resolve()
+        if resolved.is_file():
+            return str(resolved)
+    else:
+        executable = shutil.which(expanded)
+        if executable:
+            return executable
+
+    raise PracticeRunnerUnavailable(
+        f"{PRACTICE_PYTHON_ENV} does not point to a Python executable"
+    )
+
+
 def validate_source(code: str, function_name: str, parameter_names: list[str]) -> None:
     if not code.strip():
         raise PracticeRunError("Code cannot be empty")
@@ -79,7 +107,9 @@ def validate_source(code: str, function_name: str, parameter_names: list[str]) -
         tree = ast.parse(code, mode="exec")
     except SyntaxError as exc:
         message = exc.msg or "invalid syntax"
-        raise PracticeRunError(f"Syntax error on line {exc.lineno or 1}: {message}") from exc
+        raise PracticeRunError(
+            f"Syntax error on line {exc.lineno or 1}: {message}"
+        ) from exc
 
     target: ast.FunctionDef | None = None
     for node in ast.walk(tree):
@@ -144,14 +174,14 @@ def run_practice(
     worker = Path(__file__).with_name("practice_worker.py")
     try:
         completed = subprocess.run(
-            [sys.executable, "-I", str(worker)],
+            [resolve_practice_python(), "-I", str(worker)],
             input=encoded,
             capture_output=True,
             timeout=timeout,
             env={"PATH": os.getenv("PATH", "")},
             check=False,
         )
-    except subprocess.TimeoutExpired as exc:
+    except subprocess.TimeoutExpired:
         return {
             "ok": False,
             "passed": False,
@@ -169,7 +199,9 @@ def run_practice(
     try:
         result = json.loads(completed.stdout.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise PracticeRunnerUnavailable("The isolated runner returned invalid output") from exc
+        raise PracticeRunnerUnavailable(
+            "The isolated runner returned invalid output"
+        ) from exc
     if not isinstance(result, dict):
         raise PracticeRunnerUnavailable("The isolated runner returned invalid output")
     return result

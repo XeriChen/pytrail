@@ -4,7 +4,9 @@
 
 - Python 3.14
 - uv
-- Node.js 24 与 npm
+- Node.js 24 与 pnpm 11
+- 后端质量工具由 uv 管理的 Ruff
+- 前端质量工具由 pnpm 管理的 Oxlint 与 Prettier
 - 可选：Docker 与 Docker Compose
 
 Windows PowerShell、macOS 和 Linux 均可进行日常开发。练习子进程的 Unix `resource` 限制仅在支持该模块的平台生效。
@@ -23,8 +25,8 @@ uv run uvicorn app.main:app --reload --port 8000
 
 ```bash
 cd frontend
-npm ci
-npm run dev
+pnpm install --frozen-lockfile
+pnpm dev
 ```
 
 检查：
@@ -48,10 +50,39 @@ http://localhost:8000/docs
 | `PYTRAIL_ENV` / `ENV` | `backend/app/auth.py` | `development` | `production` 或 `prod` 禁止默认密钥 |
 | `PYTRAIL_ENABLE_LEGACY_EXECUTE` | `backend/app/main.py` | 关闭 | 设为 `1` 且非生产环境时启用旧课内演练 `/api/execute`；隔离强度低，不要向公网开放 |
 | `CORS_ORIGINS` | `backend/app/main.py` | `http://localhost:5173` | 逗号分隔；生产不要使用宽泛来源 |
+| `PYTRAIL_STATIC_DIR` | `backend/app/main.py` | 未设置 | 指向包含 `index.html` 的构建目录时，API 托管静态文件并为非 API 路径提供 SPA 回退 |
+| `PYTRAIL_PRACTICE_PYTHON` | `backend/app/practice_runner.py` | API 当前解释器 | 练习 worker 使用的 Python 命令或路径；目标环境必须安装兼容版本的 RestrictedPython |
+| `PYTRAIL_USERLESS_MODE` | `backend/app/auth.py`、`backend/app/main.py` | 关闭 | 设为 `1`/`true` 后关闭登录注册和所有进度写入，练习与速测允许匿名运行 |
 | `VITE_API_URL` | `frontend/src/api.ts` | `/api` | 构建期变量 |
 | `VITE_API_PROXY_TARGET` | `frontend/vite.config.ts` | `http://127.0.0.1:8000` | 仅 Vite 开发代理 |
 
 修改环境变量后应重启对应进程。后端模块在 import 时读取数据库 URL 和密钥，热更新不能可靠替代完整重启。
+
+## 单端口静态部署
+
+构建前端后，可让 API 进程同时提供构建产物。仍应由 HTTPS 反向代理处理 TLS：
+
+```powershell
+cd frontend
+pnpm build
+cd ../backend
+$env:PYTRAIL_STATIC_DIR = (Resolve-Path ../frontend/dist)
+$env:PYTRAIL_PRACTICE_PYTHON = (Resolve-Path .venv/Scripts/python.exe)
+$env:PYTRAIL_USERLESS_MODE = '1'
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+已注册的 API 路由优先于前端回退；未知的 `/api/*` 路径保持 JSON 404。静态目录必须包含 `index.html`，路径逃逸请求会返回 404。
+
+这是临时停用 Compose、直接使用本机 Python 的部署方式。`PYTRAIL_PRACTICE_PYTHON` 可以是绝对路径或 `PATH` 中的命令；路径不存在、解释器无法启动或没有安装 RestrictedPython 时，练习运行接口返回 `503`，且不会写入尝试次数。在 Docker 容器内设置该变量只能指向容器内路径，不能借此访问宿主机解释器。
+
+本机 worker 仍使用 `-I`、RestrictedPython、AST 校验、总超时和有限 JSON 协议，但没有容器级隔离。只应在受信任的本机或内网临时部署中使用；对不可信公网流量应接入专用沙箱服务。
+
+### 无用户部署
+
+设置 `PYTRAIL_USERLESS_MODE=1` 后，`GET /api/config` 会报告 `userless_mode: true`。前端会隐藏登录、注册、连击和进度展示，并清理浏览器中的旧 token。练习场运行与课内速测不再要求 Bearer token，API 返回 `progress: null` 或 `persisted: false`，不会创建或更新 `progress`、`exercise_progress`、`User` 记录。题库、课程正文和公开案例仍正常提供。
+
+该开关默认关闭。它不等同于关闭代码执行安全边界：匿名请求仍受 IP 限流、源码大小、RestrictedPython、独立子进程和总超时限制。由于没有用户身份和历史记录，只适合临时演示或受信任内网；切换环境变量后必须重启 API 和静态前端服务。
 
 ## 数据库
 
@@ -82,6 +113,8 @@ Compose 默认密钥只允许本地演示。设置 `PYTRAIL_ENV=production` 时�
 
 ```bash
 cd backend
+uv run ruff check app tests
+uv run ruff format --check app tests
 uv run python -m unittest discover -s tests -v
 ```
 
@@ -89,13 +122,23 @@ uv run python -m unittest discover -s tests -v
 
 ```bash
 cd frontend
-npm test
-npm run build
+pnpm lint
+pnpm format:check
+pnpm test
+pnpm build
 ```
 
 其他低成本检查：
 
 ```bash
+cd backend
+uv run ruff check app tests
+uv run ruff format --check app tests
+
+cd ../frontend
+pnpm lint
+pnpm format:check
+
 git diff --check
 git status --short
 ```
@@ -108,7 +151,7 @@ git status --short
 | --- | --- |
 | 纯文档 | 链接、命令、路径和 `git diff --check` |
 | 前端样式 | 相关前端测试、生产构建、桌面与移动浏览器检查 |
-| Markdown/Mermaid | renderer 测试、明暗主题、失败回退和横向溢出 |
+| Markdown/Mermaid/KaTeX | renderer 测试、明暗主题、失败回退和横向溢出 |
 | API 或模型 | 后端完整回归、相关 API 冒烟 |
 | 课程内容 | course sync 与 API 测试、目标 Markdown/资源人工抽查 |
 | 练习清单 | manifest、sync、runner 和 API 测试，官方起始代码巡检 |
@@ -141,7 +184,7 @@ git status --short
 
 ### 练习运行返回 401
 
-运行接口要求 Bearer token。确认登录状态和 `localStorage.pytrail_token`，并检查 token 是否超过 7 天或由不同 `SECRET_KEY` 签发。
+标准模式下运行接口要求 Bearer token。确认登录状态和 `localStorage.pytrail_token`，并检查 token 是否超过 7 天或由不同 `SECRET_KEY` 签发。无用户模式下若仍返回 401，检查 API 与前端是否加载了同一份部署配置并重启服务。
 
 ### 练习运行返回 429、413 或 503
 

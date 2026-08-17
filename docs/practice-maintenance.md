@@ -125,6 +125,10 @@ backend/content/practice/<course-slug>.json
 - 每个用户/IP 每分钟最多 20 次；
 - 只有登录用户可运行。
 
+worker 默认使用 API 当前解释器。临时非 Docker 部署可通过 `PYTRAIL_PRACTICE_PYTHON` 指向本机 Python；该解释器必须安装兼容版本的 RestrictedPython。这个设置只改变解释器选择，不关闭 AST 校验、`-I`、独立子进程、总超时或协议限制，也不提供容器级隔离。
+
+受信任的临时部署可设置 `PYTRAIL_USERLESS_MODE=1`。此时函数题和课内速测不要求登录，函数题响应的 `progress` 为 `null`，速测和课时进度接口返回 `persisted: false`；服务端不会写入用户、课程进度或练习进度。匿名运行仍必须遵守每 IP 限流、源码限制和全部 worker 安全边界。
+
 所有案例都是公开案例。产品当前没有隐藏测试、得分、排名或提交历史，不要在文档或 UI 中暗示这些能力。
 
 ## 进度语义

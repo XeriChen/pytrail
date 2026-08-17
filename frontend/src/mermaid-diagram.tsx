@@ -219,7 +219,12 @@ export function MermaidDiagram({ source, theme, labels }: MermaidDiagramProps) {
       >
         <Plus size={16} />
       </button>
-      <button type="button" aria-label={labels.reset} title={labels.reset} onClick={() => setZoom(1)}>
+      <button
+        type="button"
+        aria-label={labels.reset}
+        title={labels.reset}
+        onClick={() => setZoom(1)}
+      >
         <RotateCcw size={16} />
       </button>
       {overlay ? (
@@ -288,20 +293,22 @@ export function MermaidDiagram({ source, theme, labels }: MermaidDiagramProps) {
               {diagram()}
             </>
           )}
-          {fullscreen && typeof document !== 'undefined' && createPortal(
-            <div
-              className="mermaid-overlay"
-              role="dialog"
-              aria-modal="true"
-              aria-label={labels.fullscreen}
-            >
-              <div className="mermaid-overlay-shell">
-                {toolbar(true)}
-                {diagram(true)}
-              </div>
-            </div>,
-            document.body,
-          )}
+          {fullscreen &&
+            typeof document !== 'undefined' &&
+            createPortal(
+              <div
+                className="mermaid-overlay"
+                role="dialog"
+                aria-modal="true"
+                aria-label={labels.fullscreen}
+              >
+                <div className="mermaid-overlay-shell">
+                  {toolbar(true)}
+                  {diagram(true)}
+                </div>
+              </div>,
+              document.body,
+            )}
         </>
       )}
     </section>
