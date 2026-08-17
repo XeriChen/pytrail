@@ -5,9 +5,8 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import rehypeRaw from 'rehype-raw'
-import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
+import rehypeSanitize, { defaultSchema, type Options as SanitizeSchema } from 'rehype-sanitize'
 import 'katex/dist/katex.min.css'
-import type { Schema } from 'hast-util-sanitize'
 import type { Theme } from './theme'
 import { CodeBlock } from './code-block'
 import { MermaidDiagram, type MermaidLabels } from './mermaid-diagram'
@@ -57,7 +56,7 @@ const allowedTags = [
   'var',
 ]
 
-const schema: Schema = {
+const schema: SanitizeSchema = {
   ...defaultSchema,
   tagNames: allowedTags,
   attributes: {
