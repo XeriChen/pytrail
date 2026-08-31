@@ -7,7 +7,11 @@ import unittest
 from pathlib import Path
 
 from app.course_sync import COURSE_SPECS, build_manifests
-from app.practice_manifest import PracticeManifestError, load_practice_manifests
+from app.practice_manifest import (
+    EXERCISE_COUNTS,
+    PracticeManifestError,
+    load_practice_manifests,
+)
 
 CONTENT_ROOT = Path(__file__).resolve().parents[1] / "content" / "python-100-days"
 PRACTICE_ROOT = Path(__file__).resolve().parents[1] / "content" / "practice"
@@ -31,11 +35,17 @@ class ShippedPracticeManifestTests(unittest.TestCase):
 
     def test_shipped_manifests_cover_every_course(self) -> None:
         self.assertEqual(set(self.records), {spec.slug for spec in COURSE_SPECS})
-        self.assertTrue(all(len(items) == 4 for items in self.records.values()))
-        self.assertEqual(sum(len(items) for items in self.records.values()), 36)
+        self.assertEqual(set(EXERCISE_COUNTS), {spec.slug for spec in COURSE_SPECS})
+        self.assertTrue(
+            all(
+                len(items) == EXERCISE_COUNTS[course_slug]
+                for course_slug, items in self.records.items()
+            )
+        )
+        self.assertEqual(sum(len(items) for items in self.records.values()), 40)
         self.assertEqual(
             len({item.slug for items in self.records.values() for item in items}),
-            36,
+            40,
         )
 
     def test_every_seed_maps_to_a_real_lesson_and_has_public_cases(self) -> None:

@@ -160,6 +160,92 @@
           "explanation": "没有联系人时返回空列表。"
         }
       ]
+    },
+    {
+      "slug": "score-sheet-summary",
+      "lesson_source_path": "Day21-30/24.Python读写Excel文件-1.md",
+      "title": "成绩表汇总",
+      "difficulty": "easy",
+      "tags": ["spreadsheets", "aggregation", "records"],
+      "prompt": "实现 `score_sheet_summary(sheet)`，模拟用程序读取一张成绩工作表。参数是去除表头后的数据行列表，每行形如 `[学生姓名, 语文, 数学]`：姓名是字符串，分数是 `0` 到 `100` 的整数。\n\n对总分达到 `180` 及以上的学生，输出 `name`（去除首尾空白后的姓名）和 `total`（两科分数之和）；按 `total` 从高到低排列，总分相同时保持原有行顺序。没有达标学生时返回空列表，空表同样返回空列表。不得修改传入的行。",
+      "function_name": "score_sheet_summary",
+      "signature": {
+        "parameters": [
+          {"name": "sheet", "type": "list[list[object]]"}
+        ],
+        "returns": "list[dict[str, object]]"
+      },
+      "starter_code": "def score_sheet_summary(sheet: list[list]) -> list[dict]:\n    return []\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `score_sheet_summary` 的参数和 spreadsheets, aggregation 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
+      "cases": [
+        {
+          "args": [[["关羽", 95, 92], ["张飞", 78, 88], ["赵云", 90, 91]]],
+          "expected": [
+            {"name": "关羽", "total": 187},
+            {"name": "赵云", "total": 181}
+          ],
+          "explanation": "只有总分达到 180 的两名学生入选，并按总分降序排列。"
+        },
+        {
+          "args": [[["马超", 90, 90], ["黄忠", 95, 85]]],
+          "expected": [
+            {"name": "马超", "total": 180},
+            {"name": "黄忠", "total": 180}
+          ],
+          "explanation": "180 分恰好达标，总分相同时保持原有行顺序。"
+        },
+        {
+          "args": [[["刘备", 50, 60], [" 孙尚香 ", 90, 90]]],
+          "expected": [
+            {"name": "孙尚香", "total": 180}
+          ],
+          "explanation": "姓名首尾空白被清理，未达标学生不出现。"
+        },
+        {
+          "args": [[]],
+          "expected": [],
+          "explanation": "空工作表没有汇总结果。"
+        }
+      ]
+    },
+    {
+      "slug": "page-count-summary",
+      "lesson_source_path": "Day21-30/27.Python操作PDF文件.md",
+      "title": "PDF 页数汇总",
+      "difficulty": "easy",
+      "tags": ["documents", "sorting", "numbers"],
+      "prompt": "实现 `page_count_summary(documents)`，为批量处理 PDF 文档做统计。每个文档形如 `{\"name\": 名称, \"pages\": 页数}`：名称是去除首尾空白后非空的字符串，页数是非负整数。\n\n返回 `documents`（有效文档数）和 `pages`（总页数）两个字段。缺少任一字段、名称为空或页数为负的文档视为无效，直接跳过且不参与任何计数。空列表返回两个零。不得修改传入的列表。",
+      "function_name": "page_count_summary",
+      "signature": {
+        "parameters": [
+          {"name": "documents", "type": "list[dict[str, object]]"}
+        ],
+        "returns": "dict[str, int]"
+      },
+      "starter_code": "def page_count_summary(documents: list[dict]) -> dict:\n    return {\"documents\": 0, \"pages\": 0}\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `page_count_summary` 的参数和 documents, sorting 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
+      "cases": [
+        {
+          "args": [[{"name": "report.pdf", "pages": 12}, {"name": "slides.pdf", "pages": 0}]],
+          "expected": {"documents": 2, "pages": 12},
+          "explanation": "零页文档同样有效并计入文档数。"
+        },
+        {
+          "args": [[{"name": " a.pdf ", "pages": 3}, {"name": "", "pages": 9}, {"pages": 5}, {"name": "c.pdf"}]],
+          "expected": {"documents": 1, "pages": 3},
+          "explanation": "空名称、缺字段和页数为负之外，只有完整文档参与计数。"
+        },
+        {
+          "args": [[{"name": "draft.pdf", "pages": -2}, {"name": "final.pdf", "pages": 4}]],
+          "expected": {"documents": 1, "pages": 4},
+          "explanation": "负页数文档无效，不影响其余文档。"
+        },
+        {
+          "args": [[]],
+          "expected": {"documents": 0, "pages": 0},
+          "explanation": "没有文档时两个计数都是零。"
+        }
+      ]
     }
   ]
 }

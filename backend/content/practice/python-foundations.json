@@ -116,6 +116,46 @@
       ]
     },
     {
+      "slug": "set-operations-summary",
+      "lesson_source_path": "Day01-20/12.常用数据结构之集合.md",
+      "title": "集合运算摘要",
+      "difficulty": "easy",
+      "tags": ["sets", "sorting", "numbers"],
+      "prompt": "实现 `set_operations_summary(items_a, items_b)`，把两个整数列表各看作一个集合（忽略重复元素和出现顺序），返回包含四个键的新字典：\n\n- `all`：两个列表中出现过的全部整数（并集），升序排列。\n- `both`：同时出现在两个列表中的整数（交集），升序排列。\n- `only_a`：只出现在第一个列表中的整数（差集），升序排列。\n- `only_b`：只出现在第二个列表中的整数，升序排列。\n\n不得修改传入的列表；空列表是合法输入。",
+      "function_name": "set_operations_summary",
+      "signature": {
+        "parameters": [
+          {"name": "items_a", "type": "list[int]"},
+          {"name": "items_b", "type": "list[int]"}
+        ],
+        "returns": "dict[str, list[int]]"
+      },
+      "starter_code": "def set_operations_summary(items_a: list[int], items_b: list[int]) -> dict:\n    return {\"all\": [], \"both\": [], \"only_a\": [], \"only_b\": []}\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `set_operations_summary` 的参数和 sets, sorting 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
+      "cases": [
+        {
+          "args": [[1, 2, 3, 3], [2, 3, 4]],
+          "expected": {"all": [1, 2, 3, 4], "both": [2, 3], "only_a": [1], "only_b": [4]},
+          "explanation": "重复的 3 只计一次，四个键都返回升序列表。"
+        },
+        {
+          "args": [[5, 5, 5], [5]],
+          "expected": {"all": [5], "both": [5], "only_a": [], "only_b": []},
+          "explanation": "两个列表去重后是同一个集合。"
+        },
+        {
+          "args": [[], [7, 2, 9]],
+          "expected": {"all": [2, 7, 9], "both": [], "only_a": [], "only_b": [2, 7, 9]},
+          "explanation": "空列表与任何集合的交集和差集都为空。"
+        },
+        {
+          "args": [[10, -3, 4], []],
+          "expected": {"all": [-3, 4, 10], "both": [], "only_a": [-3, 4, 10], "only_b": []},
+          "explanation": "负数同样按数值升序排列。"
+        }
+      ]
+    },
+    {
       "slug": "group-scores",
       "lesson_source_path": "Day01-20/13.常用数据结构之字典.md",
       "title": "分组汇总成绩",
@@ -152,6 +192,49 @@
           "args": [[]],
           "expected": {},
           "explanation": "没有记录时不产生任何分组。"
+        }
+      ]
+    },
+    {
+      "slug": "describe-sample",
+      "lesson_source_path": "Day01-20/15.函数应用实战.md",
+      "title": "样本统计摘要",
+      "difficulty": "medium",
+      "tags": ["functions", "statistics", "sorting"],
+      "prompt": "实现 `describe_sample(data)`，为一组整数样本计算描述性统计，返回包含三个键的新字典：\n\n- `mean`：算术平均值，即样本总和除以样本数量。\n- `median`：中位数；样本升序排列后，数量为奇数时取正中间的数，数量为偶数时取中间两个数的平均值。\n- `ptp`：极差，即最大值减最小值。\n\n输入至少包含一个样本；不得修改传入的列表，也不得使用外部库。",
+      "function_name": "describe_sample",
+      "signature": {
+        "parameters": [
+          {"name": "data", "type": "list[int]"}
+        ],
+        "returns": "dict[str, float]"
+      },
+      "starter_code": "def describe_sample(data: list[int]) -> dict:\n    return {\"mean\": 0.0, \"median\": 0.0, \"ptp\": 0}\n",
+      "hints": ["先用一个公开样例手算输入和预期输出，把题目拆成“输入、处理、返回”三步。", "先关注 `describe_sample` 的参数和 functions, statistics 相关概念；可以先写清楚每一步，再决定使用循环、条件或列表/字典操作。", "伪代码：读取每个输入 → 按题目条件处理 → 把结果放入新的列表或字典 → 返回结果；最后再检查空输入、重复值和边界情况。"],
+      "cases": [
+        {
+          "args": [[3, 1, 4, 1, 5]],
+          "expected": {"mean": 2.8, "median": 3, "ptp": 4},
+          "comparison": "approximate",
+          "explanation": "奇数个样本的中位数是排序后正中间的数。"
+        },
+        {
+          "args": [[2, 8, 4, 6]],
+          "expected": {"mean": 5, "median": 5, "ptp": 6},
+          "comparison": "approximate",
+          "explanation": "偶数个样本的中位数取中间两个数的平均值。"
+        },
+        {
+          "args": [[7]],
+          "expected": {"mean": 7, "median": 7, "ptp": 0},
+          "comparison": "approximate",
+          "explanation": "单个样本的三个统计量都由它自身决定。"
+        },
+        {
+          "args": [[1, 2, 4, 8, 16, 32]],
+          "expected": {"mean": 10.5, "median": 6, "ptp": 31},
+          "comparison": "approximate",
+          "explanation": "排序后中间两数是 4 和 8，均值恰好可以整除。"
         }
       ]
     }

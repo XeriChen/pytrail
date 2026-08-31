@@ -23,9 +23,9 @@ backend/content/practice/<course-slug>.json
 
 - 文件集合与 `COURSE_SPECS` 完全一致；
 - 每个文件的 `course_slug` 与文件名一致；
-- 每门课程恰好 4 题；
+- 每门课程题数与 `backend/app/practice_manifest.py` 的 `EXERCISE_COUNTS` 一致（当前 `python-foundations` 与 `python-essentials` 各 6 题，其余课程各 4 题）；
 - 所有题目 slug 全局唯一；
-- 总计 9 个文件、36 道题。
+- 总计 9 个文件、40 道题。
 
 不要通过删除校验来临时接收半完成内容。要改变数量策略，应同时修改产品文案、分页预期、测试和本文档。
 
@@ -105,7 +105,7 @@ backend/content/practice/<course-slug>.json
 - 近似比较只用于确有浮点误差的数值题；
 - 起始代码保留任务结构，但不包含完整答案；
 - 三层提示从理解样例、选择结构到伪代码逐步具体，不在第一层直接给出完整答案；
-- 难度与当前 36 题的相对复杂度一致；
+- 难度与当前 40 题的相对复杂度一致；
 - 标签描述知识点，不使用随意的展示文案。
 
 内容语言目前为中文，界面 chrome 支持中英文。题面不是前端 i18n 副本，不要在 `i18n.ts` 中重复维护。

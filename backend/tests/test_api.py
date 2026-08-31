@@ -190,7 +190,7 @@ class ApiTests(unittest.TestCase):
         response = self.client.get("/api/practice/exercises")
         self.assertEqual(response.status_code, 200, response.text)
         catalog = response.json()
-        self.assertEqual(catalog["total"], 36)
+        self.assertEqual(catalog["total"], 40)
         self.assertEqual(len(catalog["items"]), 12)
         self.assertEqual(catalog["items"][0]["slug"], "prime-range-summary")
         self.assertIsNone(catalog["items"][0]["progress"])

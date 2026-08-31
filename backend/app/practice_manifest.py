@@ -19,6 +19,23 @@ MAX_STARTER_CHARS = 12_000
 MAX_HINT_CHARS = 4_000
 MAX_HINTS = 3
 
+# Exact exercise count per course. Keys must match the COURSE_SPECS slugs; the
+# shipped-manifest tests assert the key set equals the real course slugs, so a
+# typo or stale entry fails the suite. Unknown course slugs (test fixtures)
+# fall back to DEFAULT_EXERCISE_COUNT.
+DEFAULT_EXERCISE_COUNT = 4
+EXERCISE_COUNTS: dict[str, int] = {
+    "python-foundations": 6,
+    "python-essentials": 6,
+    "python-language-and-linux": 4,
+    "databases-and-sql": 4,
+    "web-development-with-django": 4,
+    "web-scraping": 4,
+    "data-analysis": 4,
+    "machine-learning": 4,
+    "projects-and-production": 4,
+}
+
 
 class PracticeManifestError(RuntimeError):
     pass
@@ -290,7 +307,6 @@ def load_practice_manifests(
         raise PracticeManifestError(
             f"Practice manifest set mismatch; missing={missing}, unexpected={unexpected}"
         )
-
     result: dict[str, tuple[PracticeExerciseSeed, ...]] = {}
     seen_slugs: set[str] = set()
     for course_slug in expected:
@@ -299,9 +315,10 @@ def load_practice_manifests(
         if document.get("course_slug") != course_slug:
             raise PracticeManifestError(f"{path}: course_slug must be {course_slug!r}")
         raw_exercises = document.get("exercises")
-        if not isinstance(raw_exercises, list) or len(raw_exercises) != 4:
+        expected_count = EXERCISE_COUNTS.get(course_slug, DEFAULT_EXERCISE_COUNT)
+        if not isinstance(raw_exercises, list) or len(raw_exercises) != expected_count:
             raise PracticeManifestError(
-                f"{path}: each course must contain exactly 4 exercises"
+                f"{path}: course must contain exactly {expected_count} exercises"
             )
         if course_slug not in lesson_sources:
             raise PracticeManifestError(

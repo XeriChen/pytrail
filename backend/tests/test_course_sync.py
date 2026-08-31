@@ -29,6 +29,7 @@ from app.models import (
     Progress,
     User,
 )
+from app.practice_manifest import EXERCISE_COUNTS
 
 CONTENT_ROOT = Path(__file__).resolve().parents[1] / "content" / "python-100-days"
 
@@ -80,7 +81,7 @@ class CourseManifestTests(unittest.TestCase):
         self.assertEqual(
             sum(exercise.kind == "quick_check" for exercise in exercises), 22
         )
-        self.assertEqual(sum(exercise.kind == "function" for exercise in exercises), 36)
+        self.assertEqual(sum(exercise.kind == "function" for exercise in exercises), 40)
         self.assertTrue(
             all(
                 sum(
@@ -88,7 +89,7 @@ class CourseManifestTests(unittest.TestCase):
                     for lesson in course.lessons
                     for exercise in lesson.exercises
                 )
-                == 4
+                == EXERCISE_COUNTS[course.spec.slug]
                 for course in self.manifests
             )
         )
