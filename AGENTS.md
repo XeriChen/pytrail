@@ -20,14 +20,16 @@
 | 课程注册、顺序、内容同步 | `backend/app/course_sync.py` |
 | 练习清单格式与校验 | `backend/app/practice_manifest.py` |
 | 练习运行限制 | `backend/app/practice_runner.py`、`backend/app/practice_worker.py` |
+| 练习目录查询、进度 upsert 与反馈分类 | `backend/app/practice_service.py`、`backend/app/practice_feedback.py` |
 | 课时进度与学习活动原子写入 | `backend/app/progress_service.py`、`backend/app/activity_service.py` |
-| 今日任务、连续学习与活动条 | `backend/app/dashboard_service.py` |
+| 今日任务、连续学习与活动条 | `backend/app/dashboard_service.py`、`backend/app/metrics.py` |
 | 数据模型 | `backend/app/models.py` |
 | API 合约 | `backend/app/main.py`、`backend/app/schemas.py` |
 | 认证、环境判定与用户模式 | `backend/app/auth.py` |
 | 数据库连接与 SQLite 外键 | `backend/app/database.py` |
 | 认证与练习限流 | `backend/app/ratelimit.py`、`backend/app/main.py` |
 | 前端路由与应用状态 | `frontend/src/main.tsx`、`frontend/src/practice/` |
+| 界面文案与语言切换 | `frontend/src/i18n.ts` |
 | Markdown、代码块和 Mermaid | `frontend/src/markdown.tsx` |
 | 主题与视觉 token | `frontend/src/theme.ts`、`frontend/src/styles.css` |
 | 前端依赖、开发服务器和代理 | `frontend/package.json`、`frontend/vite.config.ts` |
@@ -58,6 +60,7 @@
 ## 前端规则
 
 - 所有界面图标统一使用 `lucide-react`，界面文案禁止使用表情符号。
+- 界面 chrome 文案统一走 `frontend/src/i18n.ts` 的 zh/en 词条目录，新增文案必须同时补充两种语言；课程正文保持仓库内中文 Markdown。
 - 所有新增界面必须同时检查明色、暗色和窄屏状态；文本和固定格式控件不能横向溢出。
 - 课程正文必须继续经过现有的 sanitized Markdown 渲染器，不要直接注入未清洗 HTML。
 - Mermaid 必须保持 `securityLevel: "strict"`、主题适配、失败回退和可读性。
