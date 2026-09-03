@@ -51,7 +51,7 @@
 - 课程 Markdown 的维护入口是 `backend/content/python-100-days/`，不是被忽略的上游参考压缩包或解压目录。
 - 课程目录映射集中在 `COURSE_SPECS`。不要在前端硬编码课程或课时数量。
 - 课程资源放在对应课程的 `res/` 目录，Markdown 使用相对路径引用。
-- 练习清单位于 `backend/content/practice/`。当前必须恰好 9 个文件，每门课程的题数由 `backend/app/practice_manifest.py` 的 `EXERCISE_COUNTS` 表驱动（当前 `python-foundations` 与 `python-essentials` 各 6 题，其余课程各 4 题，共 40 题）；每题必须有恰好 3 条渐进提示。
+- 练习清单位于 `backend/content/practice/`。当前必须恰好 9 个文件，每门课程的题数由 `backend/app/practice_manifest.py` 的 `EXERCISE_COUNTS` 表驱动（当前 `python-foundations` 111 题、`python-essentials` 6 题，其余课程各 4 题，共 145 题）；每题必须有恰好 3 条渐进提示。
 - 每道题必须精确绑定真实的 `lesson_source_path`，使用 JSON 安全的参数和预期值，并提供 2 至 8 个公开案例。
 - 修改内容前后都要考虑同步会清空 `progress`、`exercise_progress` 与 `learning_activities`。
 

@@ -97,6 +97,14 @@ export function PracticeCatalog({
   const pageCount = Math.max(1, Math.ceil(data.total / data.page_size))
   const selectedCourse = params.get('course') || ''
   const lessons = useMemo(() => data.facets.lessons, [data.facets.lessons])
+  const heroCopy =
+    data.total > 0
+      ? zh
+        ? `${data.total} 道函数题，逐章锤炼课程中的关键能力。`
+        : `${data.total} function exercises mapped directly to the curriculum.`
+      : zh
+        ? '函数题逐章锤炼课程中的关键能力。'
+        : 'Function exercises mapped directly to the curriculum.'
 
   return (
     <div className="practice-catalog-page" data-testid="practice-catalog">
@@ -104,11 +112,7 @@ export function PracticeCatalog({
         <div>
           <p className="eyebrow">{zh ? '练习场 / PRACTICE LAB' : 'PRACTICE LAB / CURRICULUM'}</p>
           <h1>{zh ? '九门课程精选题' : 'Curated Python practice'}</h1>
-          <p>
-            {zh
-              ? '36 道函数题，逐章锤炼课程中的关键能力。'
-              : '36 function exercises mapped directly to the curriculum.'}
-          </p>
+          <p>{heroCopy}</p>
         </div>
         <div className="practice-total">
           <strong>{data.total}</strong>

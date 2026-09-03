@@ -81,7 +81,10 @@ class CourseManifestTests(unittest.TestCase):
         self.assertEqual(
             sum(exercise.kind == "quick_check" for exercise in exercises), 22
         )
-        self.assertEqual(sum(exercise.kind == "function" for exercise in exercises), 40)
+        self.assertEqual(
+            sum(exercise.kind == "function" for exercise in exercises),
+            sum(EXERCISE_COUNTS.values()),
+        )
         self.assertTrue(
             all(
                 sum(

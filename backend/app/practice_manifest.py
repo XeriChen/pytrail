@@ -25,7 +25,7 @@ MAX_HINTS = 3
 # fall back to DEFAULT_EXERCISE_COUNT.
 DEFAULT_EXERCISE_COUNT = 4
 EXERCISE_COUNTS: dict[str, int] = {
-    "python-foundations": 6,
+    "python-foundations": 111,
     "python-essentials": 6,
     "python-language-and-linux": 4,
     "databases-and-sql": 4,

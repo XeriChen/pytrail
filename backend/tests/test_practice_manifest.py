@@ -42,10 +42,11 @@ class ShippedPracticeManifestTests(unittest.TestCase):
                 for course_slug, items in self.records.items()
             )
         )
-        self.assertEqual(sum(len(items) for items in self.records.values()), 40)
+        total = sum(EXERCISE_COUNTS.values())
+        self.assertEqual(sum(len(items) for items in self.records.values()), total)
         self.assertEqual(
             len({item.slug for items in self.records.values() for item in items}),
-            40,
+            total,
         )
 
     def test_every_seed_maps_to_a_real_lesson_and_has_public_cases(self) -> None:

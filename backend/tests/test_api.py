@@ -44,6 +44,7 @@ from app.models import (  # noqa: E402
     Progress,
     User,
 )
+from app.practice_manifest import EXERCISE_COUNTS  # noqa: E402
 from app.ratelimit import auth_limiter, practice_limiter  # noqa: E402
 
 _EMAILS = count(1)
@@ -190,9 +191,9 @@ class ApiTests(unittest.TestCase):
         response = self.client.get("/api/practice/exercises")
         self.assertEqual(response.status_code, 200, response.text)
         catalog = response.json()
-        self.assertEqual(catalog["total"], 40)
+        self.assertEqual(catalog["total"], sum(EXERCISE_COUNTS.values()))
         self.assertEqual(len(catalog["items"]), 12)
-        self.assertEqual(catalog["items"][0]["slug"], "prime-range-summary")
+        self.assertEqual(catalog["items"][0]["slug"], "welcome-note")
         self.assertIsNone(catalog["items"][0]["progress"])
         self.assertEqual(len(catalog["facets"]["courses"]), 9)
 
