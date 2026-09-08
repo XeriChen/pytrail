@@ -16,7 +16,9 @@ MAX_SOURCE_BYTES = 12_000
 MAX_PAYLOAD_BYTES = 96_000
 MAX_OUTPUT_BYTES = 96_000
 RUN_TIMEOUT_SECONDS = 2.0
+FROZEN_BOOT_ALLOWANCE_SECONDS = 2.0
 PRACTICE_PYTHON_ENV = "PYTRAIL_PRACTICE_PYTHON"
+WORKER_FLAG = "--pytrail-practice-worker"
 
 
 class PracticeRunError(ValueError):
@@ -98,6 +100,32 @@ def resolve_practice_python() -> str:
     )
 
 
+def is_frozen_build() -> bool:
+    """Return whether the API itself runs from a PyInstaller executable."""
+    return bool(getattr(sys, "frozen", False))
+
+
+def worker_command() -> list[str]:
+    """Build the command that spawns the isolated practice worker.
+
+    A frozen build has no on-disk worker script or separate interpreter, so
+    the executable re-runs itself with the worker flag; `desktop.py` dispatches
+    that flag before touching the API. The `-I` flag is dropped there because
+    the embedded interpreter has no user site-packages to isolate away.
+    """
+    if is_frozen_build():
+        return [sys.executable, WORKER_FLAG]
+    worker = Path(__file__).with_name("practice_worker.py")
+    return [resolve_practice_python(), "-I", str(worker)]
+
+
+def worker_creationflags() -> int:
+    """Suppress the console flash each worker spawn causes on windowed builds."""
+    if sys.platform == "win32":
+        return subprocess.CREATE_NO_WINDOW
+    return 0
+
+
 def validate_source(code: str, function_name: str, parameter_names: list[str]) -> None:
     if not code.strip():
         raise PracticeRunError("Code cannot be empty")
@@ -171,15 +199,20 @@ def run_practice(
     if len(encoded) > MAX_PAYLOAD_BYTES:
         raise PracticeRunError("Exercise payload is too large")
 
-    worker = Path(__file__).with_name("practice_worker.py")
+    worker_timeout = timeout
+    if is_frozen_build():
+        # Exe bootstrap (including antivirus scans) is not user code; only the
+        # remaining budget bounds the submission itself.
+        worker_timeout = timeout + FROZEN_BOOT_ALLOWANCE_SECONDS
     try:
         completed = subprocess.run(
-            [resolve_practice_python(), "-I", str(worker)],
+            worker_command(),
             input=encoded,
             capture_output=True,
-            timeout=timeout,
+            timeout=worker_timeout,
             env={"PATH": os.getenv("PATH", "")},
             check=False,
+            creationflags=worker_creationflags(),
         )
     except subprocess.TimeoutExpired:
         return {

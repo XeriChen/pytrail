@@ -16,9 +16,13 @@ from sqlalchemy.orm import Session, load_only, selectinload
 
 from .activity_service import LESSON_COMPLETED, QUICK_CHECK_CORRECT
 from .auth import (
+    LOCAL_USER_EMAIL,
+    LOCAL_USER_NAME,
+    LOCAL_USER_PASSWORD,
     create_token,
     enforce_secret_key_policy,
     hash_password,
+    is_local_mode,
     is_production_environment,
     is_userless_mode,
     optional_current_user,
@@ -30,11 +34,14 @@ from .database import Base, SessionLocal, engine, get_db
 from .models import Course, Exercise, Lesson, User
 from .practice_feedback import classify_result
 from .practice_runner import (
+    FROZEN_BOOT_ALLOWANCE_SECONDS,
     MAX_SOURCE_BYTES,
     PracticeCaseInput,
     PracticeRunError,
     PracticeRunnerUnavailable,
+    is_frozen_build,
     run_practice,
+    worker_creationflags,
 )
 from .practice_service import (
     DIFFICULTIES,
@@ -68,6 +75,26 @@ from .schemas import (
 )
 
 
+def ensure_local_user(db: Session) -> None:
+    """Create the fixed desktop account once in local mode.
+
+    The desktop client always logs in with these credentials; the account is
+    never exposed on public deployments because the flag is off there.
+    """
+    if not is_local_mode():
+        return
+    if db.scalar(select(User).where(User.email == LOCAL_USER_EMAIL)):
+        return
+    db.add(
+        User(
+            name=LOCAL_USER_NAME,
+            email=LOCAL_USER_EMAIL,
+            password_hash=hash_password(LOCAL_USER_PASSWORD),
+        )
+    )
+    db.commit()
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     if not is_userless_mode():
@@ -75,6 +102,7 @@ async def lifespan(_app: FastAPI):
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
+        ensure_local_user(db)
         result = sync_courses(db, resolve_content_root())
         _app.state.content_index = result.index
     finally:
@@ -107,6 +135,9 @@ def limit_auth(request: Request) -> None:
         )
 
 
+EXEC_FLAG = "--pytrail-exec-stdin"
+
+
 def legacy_execute_enabled() -> bool:
     """The legacy in-lesson playground runs unisolated `python -I -c`.
 
@@ -130,7 +161,7 @@ def health():
 @app.get("/api/config")
 def config():
     """Expose non-sensitive deployment capabilities to the frontend."""
-    return {"userless_mode": is_userless_mode()}
+    return {"userless_mode": is_userless_mode(), "local_mode": is_local_mode()}
 
 
 @app.post("/api/auth/register", response_model=Token, status_code=201)
@@ -507,17 +538,37 @@ def execute(payload: ExecuteIn, user: User | None = Depends(optional_current_use
     if len(payload.code) > 4000:
         raise HTTPException(413, "Code is too long")
     try:
-        result = subprocess.run(
-            [sys.executable, "-I", "-c", payload.code],
-            capture_output=True,
-            text=True,
-            timeout=2,
-            env={"PATH": os.getenv("PATH", "")},
-        )
+        if is_frozen_build():
+            result = subprocess.run(
+                [sys.executable, EXEC_FLAG],
+                input=payload.code.encode("utf-8"),
+                capture_output=True,
+                timeout=2 + FROZEN_BOOT_ALLOWANCE_SECONDS,
+                env={
+                    "PATH": os.getenv("PATH", ""),
+                    "PYTHONIOENCODING": "utf-8",
+                },
+                creationflags=worker_creationflags(),
+            )
+            stdout = result.stdout.decode("utf-8", "replace")
+            stderr = result.stderr.decode("utf-8", "replace")
+        else:
+            result = subprocess.run(
+                [sys.executable, "-I", "-c", payload.code],
+                capture_output=True,
+                text=True,
+                timeout=2,
+                env={
+                    "PATH": os.getenv("PATH", ""),
+                    "PYTHONIOENCODING": "utf-8",
+                },
+            )
+            stdout = result.stdout
+            stderr = result.stderr
         return {
             "ok": result.returncode == 0,
-            "stdout": result.stdout[-4000:],
-            "stderr": result.stderr[-4000:],
+            "stdout": stdout[-4000:],
+            "stderr": stderr[-4000:],
         }
     except subprocess.TimeoutExpired:
         return {

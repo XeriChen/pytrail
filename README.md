@@ -2,7 +2,7 @@
 
 PyTrail 是一个面向 Python 学习路径的全栈应用。它将 9 门课程、102 个课时和 145 道章节关联函数题组织为两个互相联通但独立的体验：课程阅读器与练习场。
 
-当前仓库以本地开发和小规模部署为目标。课程内容与练习清单在 API 启动时同步到数据库，前端按需加载课程、课时和题目。
+当前仓库以本地开发和小规模部署为目标，同时提供 Windows 10/11 桌面版打包（onedir 文件夹 + pywebview 窗口 + 本地默认用户）。课程内容与练习清单在 API 启动时同步到数据库，前端按需加载课程、课时和题目。
 
 ## 核心能力
 
@@ -11,9 +11,10 @@ PyTrail 是一个面向 Python 学习路径的全栈应用。它将 9 门课程�
 - 独立练习场：`/practice` 题库和 `/practice/:slug` 双栏工作台。
 - 145 道函数题精确关联课程章节，支持课程、课时、难度、标签和进度筛选。
 - 每道函数题提供三层渐进提示，并按校验、运行时错误、输出错误和全部通过给出反馈。
-- JWT 登录、课程进度、练习状态、尝试次数和最近代码保存。
+- JWT 登录、课程进度、练习状态、尝试次数和最近代码保存；桌面版自动使用本地默认用户，无需登录。
 - 登录后的今日任务、最近 7 天有效学习活动与基于成功行为计算的连续学习天数。
 - RestrictedPython 子进程运行器，带源码大小、超时、输入输出和速率限制。
+- Windows 桌面版：双击 `PyTrail.exe` 打开独立窗口（pywebview + WebView2），同进程后台 API，进度保存在 `%APPDATA%\PyTrail\learning.db`。
 
 ## 技术栈
 
@@ -23,7 +24,7 @@ PyTrail 是一个面向 Python 学习路径的全栈应用。它将 9 门课程�
 | 内容渲染 | React Markdown、rehype-sanitize、remark-math/rehype-katex、KaTeX 0.16、Prism、Mermaid |
 | 后端 | FastAPI、SQLAlchemy 2、Pydantic 2、JWT、RestrictedPython |
 | 数据库 | 本地默认 SQLite，生产可使用 PostgreSQL |
-| 交付 | Docker Compose、GitHub Actions |
+| 交付 | Docker Compose、GitHub Actions、PyInstaller（Windows 桌面版） |
 
 ## 仓库结构
 
@@ -34,6 +35,8 @@ PyTrail 是一个面向 Python 学习路径的全栈应用。它将 9 门课程�
 |   |-- app/                          # API、同步、模型、运行器
 |   |-- content/python-100-days/      # 课程 Markdown 与 res/ 资源
 |   |-- content/practice/             # 9 份练习清单
+|   |-- desktop.py                    # 桌面版入口（PyInstaller）
+|   |-- pytrail_desktop.spec          # 桌面版打包配置
 |   `-- tests/                        # 后端回归测试
 |-- frontend/
 |   |-- public/                       # 静态资源
@@ -96,6 +99,23 @@ uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 此时练习代码由指定的本机 Python 启动独立 RestrictedPython 子进程，仍保留源码校验、超时和协议限制；它不是容器级安全沙箱，不应直接承载不可信公网流量。
 
+## Windows 桌面版
+
+在 Windows 构建机上打包 onedir 文件夹版程序：
+
+```powershell
+cd frontend
+pnpm install --frozen-lockfile
+pnpm build
+cd ../backend
+uv sync --locked
+uv run pyinstaller pytrail_desktop.spec --noconfirm
+```
+
+产物在 `backend/dist/PyTrail/`，可整体 zip 分发；双击 `PyTrail.exe` 打开独立桌面窗口（pywebview + 系统 WebView2），API 在同进程内监听 127.0.0.1 动态端口。桌面版自动创建并使用本地默认用户，练习与课时进度保存在 `%APPDATA%\PyTrail\learning.db`；再次双击 exe 复用已运行的服务、只开新窗口。pywebview 不可用时自动回退系统浏览器。
+
+细节（`PYTRAIL_LOCAL_MODE` 语义、密钥与数据位置、升级重置说明、排障）见 [桌面版打包](docs/desktop-packaging.md)。
+
 ## 配置
 
 | 变量 | 默认值 | 说明 |
@@ -108,7 +128,8 @@ uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 | `CORS_ORIGINS` | `http://localhost:5173` | 逗号分隔的允许来源 |
 | `PYTRAIL_STATIC_DIR` | 未设置 | 指向包含 `index.html` 的前端构建目录时，API 同时托管静态文件并提供 SPA 回退 |
 | `PYTRAIL_PRACTICE_PYTHON` | API 当前解释器 | 练习 worker 使用的 Python 命令或路径；临时本机部署可显式指向本机虚拟环境 |
-| `PYTRAIL_USERLESS_MODE` | 关闭 | 设为 `1`/`true`/`yes`/`on` 后关闭登录注册、用户详情、dashboard 和所有进度写入，练习与速测可匿名运行；旧 `/api/execute` 也保持关闭 |
+| `PYTRAIL_USERLESS_MODE` | 关闭 | 设为 `1`/`true`/`yes`/`on` 后关闭登录注册、用户详情、dashboard 和所有进度写入，练习与速测可匿名运行；旧 `/api/execute` 也保持关闭。与 `PYTRAIL_LOCAL_MODE` 同时设置时本模式优先 |
+| `PYTRAIL_LOCAL_MODE` | 关闭 | 桌面版专用：设为 `1`/`true`/`yes`/`on` 后启动时自动创建并使用本地默认用户（`local@pytrail.local`），进度正常持久化；仅限本机单用户场景，服务端部署不要开启 |
 | `VITE_API_URL` | `/api` | 前端请求 API 的基础路径 |
 | `VITE_API_PROXY_TARGET` | `http://127.0.0.1:8000` | Vite 开发代理目标 |
 
@@ -162,4 +183,5 @@ RestrictedPython 子进程不是面向敌对公网流量的完整强隔离沙箱
 - [开发与运维](docs/development.md)
 - [课程内容维护](docs/content-maintenance.md)
 - [练习题维护](docs/practice-maintenance.md)
+- [桌面版打包](docs/desktop-packaging.md)
 - [Agent 协作规则](AGENTS.md)

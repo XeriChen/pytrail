@@ -15,6 +15,10 @@ from .models import User
 
 DEFAULT_SECRET_KEY = "dev-only-change-me"
 USERLESS_MODE_ENV = "PYTRAIL_USERLESS_MODE"
+LOCAL_MODE_ENV = "PYTRAIL_LOCAL_MODE"
+LOCAL_USER_EMAIL = "local@pytrail.local"
+LOCAL_USER_NAME = "本地用户"
+LOCAL_USER_PASSWORD = "pytrail-local-desktop-account"
 MIN_SECRET_KEY_LENGTH = 16
 KNOWN_INSECURE_SECRETS = frozenset(
     {
@@ -54,6 +58,18 @@ def is_production_environment(environment: str | None = None) -> bool:
 def is_userless_mode() -> bool:
     """Return whether this deployment intentionally has no user accounts."""
     value = os.getenv(USERLESS_MODE_ENV, "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
+
+def is_local_mode() -> bool:
+    """Return whether this deployment auto-provisions one persistent local user.
+
+    Userless mode wins when both flags are set so a single branch decides
+    authentication behavior.
+    """
+    if is_userless_mode():
+        return False
+    value = os.getenv(LOCAL_MODE_ENV, "").strip().lower()
     return value in {"1", "true", "yes", "on"}
 
 

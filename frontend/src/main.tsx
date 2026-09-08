@@ -98,10 +98,15 @@ type Dashboard = {
   today_task: TodayTask | null
   recent_activity: string[]
 }
-type DeploymentConfig = { userless_mode: boolean }
+type DeploymentConfig = { userless_mode: boolean; local_mode?: boolean }
 type DeploymentMode = 'loading' | 'standard' | 'userless' | 'error'
 type Tab = 'overview' | 'course' | 'practice'
 type LoadState = 'idle' | 'loading' | 'success' | 'error' | 'empty'
+
+const LOCAL_ACCOUNT = {
+  email: 'local@pytrail.local',
+  password: 'pytrail-local-desktop-account',
+} as const
 
 const emptyDashboard = (): Dashboard => ({
   lessons_total: 0,
@@ -229,6 +234,7 @@ function AppShell() {
   )
   const [user, setUser] = useState<User | null>(null)
   const [deploymentMode, setDeploymentMode] = useState<DeploymentMode>('loading')
+  const [localModeEnabled, setLocalModeEnabled] = useState(false)
   const [configRequestKey, setConfigRequestKey] = useState(0)
   const [dashboard, setDashboard] = useState<Dashboard>(emptyDashboard)
   const [dashboardState, setDashboardState] = useState<LoadState>('idle')
@@ -256,6 +262,7 @@ function AppShell() {
 
   const failed = t(locale, 'request.failed')
   const userlessMode = deploymentMode === 'userless'
+  const localMode = deploymentMode === 'standard' && Boolean(localModeEnabled)
   const deploymentReady = deploymentMode !== 'loading'
 
   const setLocale = (next: Locale) => {
@@ -345,6 +352,7 @@ function AppShell() {
     setDeploymentMode('loading')
     request<DeploymentConfig>('/config', {}, failed, controller.signal)
       .then((config) => {
+        setLocalModeEnabled(Boolean(config.local_mode))
         setDeploymentMode(config.userless_mode ? 'userless' : 'standard')
         if (config.userless_mode) {
           localStorage.removeItem('pytrail_token')
@@ -377,6 +385,28 @@ function AppShell() {
       setDashboardState('idle')
       return
     }
+    if (localModeEnabled) {
+      // The local desktop build re-issues the fixed account login on every
+      // launch, so a rotated or expired key never leaves the user signed out.
+      request<{ user: User; access_token: string }>(
+        '/auth/login',
+        {
+          method: 'POST',
+          body: JSON.stringify({ email: LOCAL_ACCOUNT.email, password: LOCAL_ACCOUNT.password }),
+        },
+        failed,
+      )
+        .then((data) => {
+          localStorage.setItem('pytrail_token', data.access_token)
+          setUser(data.user)
+          loadDashboard()
+        })
+        .catch(() => {
+          localStorage.removeItem('pytrail_token')
+          setUser(null)
+        })
+      return
+    }
     if (localStorage.getItem('pytrail_token')) {
       const controller = new AbortController()
       request<User>('/auth/me', {}, failed, controller.signal)
@@ -390,7 +420,7 @@ function AppShell() {
       return () => controller.abort()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deploymentMode])
+  }, [deploymentMode, localModeEnabled])
 
   useEffect(() => {
     if (!practiceRoute && catalogState === 'idle') loadCourses()
@@ -529,6 +559,7 @@ function AppShell() {
               <Settings size={16} /> {tx('nav.settings')}
             </button>
             {!userlessMode &&
+              !localMode &&
               deploymentReady &&
               (user ? (
                 <button className="ghost-btn" type="button" onClick={signOut}>
@@ -575,12 +606,13 @@ function AppShell() {
               <strong>{crumb}</strong>
             </div>
             <div className="mast-actions">
-              {!userlessMode && (
+              {!userlessMode && !localMode && (
                 <span className="streak">
                   <Flame size={16} /> {tx('top.streak', { n: dashboard.streak })}
                 </span>
               )}
               {!userlessMode &&
+                !localMode &&
                 deploymentReady &&
                 (user ? (
                   <div className="avatar" title={user.email}>
@@ -641,6 +673,7 @@ function AppShell() {
               onRetryLesson={() => lessonTargetId != null && loadLesson(lessonTargetId)}
               user={user}
               userlessMode={userlessMode}
+              hideAuthUi={localMode}
               authReady={deploymentReady}
               onAuth={() => setAuthOpen(true)}
               onSubmitted={refreshDashboard}
@@ -672,7 +705,7 @@ function AppShell() {
             </div>
           )}
         </main>
-        {authOpen && deploymentReady && !userlessMode && (
+        {authOpen && deploymentReady && !userlessMode && !localMode && (
           <AuthModal
             onClose={() => setAuthOpen(false)}
             onAuth={(u, token) => {
@@ -1078,6 +1111,7 @@ function CourseView({
   onRetryLesson,
   user,
   userlessMode,
+  hideAuthUi,
   authReady,
   onAuth,
   onSubmitted,
@@ -1098,6 +1132,7 @@ function CourseView({
   onRetryLesson: () => void
   user: User | null
   userlessMode: boolean
+  hideAuthUi: boolean
   authReady: boolean
   onAuth: () => void
   onSubmitted: () => void
@@ -1242,7 +1277,7 @@ function CourseView({
                     <Code2 size={16} /> <span>{tx('exercise.none')}</span>
                   </div>
                 )}
-                {!user && !userlessMode && (
+                {!user && !userlessMode && !hideAuthUi && (
                   <div className="signin-note">
                     <Globe size={17} />
                     <span>{tx('signin.note')}</span>

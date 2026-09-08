@@ -178,7 +178,8 @@ def main() -> None:
     )
 
 
-if __name__ == "__main__":
+def run() -> None:
+    """Run one stdio request, reporting failures as the error JSON contract."""
     try:
         main()
     except Exception as exc:
@@ -192,3 +193,7 @@ if __name__ == "__main__":
                 "cases": [],
             }
         )
+
+
+if __name__ == "__main__":
+    run()

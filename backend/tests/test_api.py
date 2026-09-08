@@ -91,12 +91,14 @@ class ApiTests(unittest.TestCase):
     def test_userless_mode_is_opt_in(self) -> None:
         self.assertFalse(is_userless_mode())
         self.assertEqual(
-            self.client.get("/api/config").json(), {"userless_mode": False}
+            self.client.get("/api/config").json(),
+            {"userless_mode": False, "local_mode": False},
         )
         with patch.dict(os.environ, {USERLESS_MODE_ENV: "1"}):
             self.assertTrue(is_userless_mode())
             self.assertEqual(
-                self.client.get("/api/config").json(), {"userless_mode": True}
+                self.client.get("/api/config").json(),
+                {"userless_mode": True, "local_mode": False},
             )
 
     def test_userless_mode_runs_without_auth_and_does_not_persist_progress(

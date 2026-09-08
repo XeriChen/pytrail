@@ -33,6 +33,7 @@
 | Markdown、代码块和 Mermaid | `frontend/src/markdown.tsx` |
 | 主题与视觉 token | `frontend/src/theme.ts`、`frontend/src/styles.css` |
 | 前端依赖、开发服务器和代理 | `frontend/package.json`、`frontend/vite.config.ts` |
+| 桌面版入口、打包与本地模式 | `backend/desktop.py`、`backend/pytrail_desktop.spec`、`docs/desktop-packaging.md` |
 | 自动化入口 | `.github/workflows/ci.yml` |
 
 文档与实现冲突时，先确认实现和测试，再更新文档。不要为了匹配过期文档而改变已验证的业务行为。
@@ -45,6 +46,7 @@
 - 课程内容的稳定标识是课程 slug 与课时 `source_path`；函数题的稳定标识是全局唯一 slug。数据库 ID 可在同步后变化。
 - `starter_code` 是官方模板；用户最近代码只存在 `progress.last_code`。API 和前端必须保持两者分离。
 - 练习通过状态单调递增。通过后的失败运行可以更新次数和最近代码，但不能把状态降回 `in_progress`。
+- 桌面版（`backend/desktop.py`）与 API 部署共享同一套业务代码：本地模式只通过 `PYTRAIL_LOCAL_MODE` 自动创建默认用户，不新增持久化分支。`--pytrail-practice-worker` 参数分流必须保持在导入 `app.main` 之前。
 
 ## 内容修改规则
 
@@ -71,8 +73,10 @@
 
 - 内容解析和清单校验必须在数据库写入前完成；同步失败必须保留上一个完整目录。
 - 公开列表和详情不能泄露速测答案、服务端秘密或未公开运行器信息。
-- 练习执行默认必须保持鉴权；启用 `PYTRAIL_USERLESS_MODE`（`1`、`true`、`yes` 或 `on`）时允许匿名执行，但仍必须保持 IP 速率限制、源码限制、总超时和独立子进程边界。该模式将认证、用户详情、dashboard 和所有进度写入接口关闭或改为不持久化，并禁用旧 `/api/execute`。
+- 练习执行默认必须保持鉴权；启用 `PYTRAIL_USERLESS_MODE`（`1`、`true`、`yes` 或 `on`）时允许匿名执行，但仍必须保持 IP 速率限制、源码限制、总超时和独立子进程边界。该模式将认证、用户详情、dashboard 和所有进度写入接口关闭或改为不持久化，并禁用旧 `/api/execute`。与 `PYTRAIL_LOCAL_MODE` 同时设置时 userless 优先。
+- `PYTRAIL_LOCAL_MODE` 是桌面版专用标志：lifespan 幂等创建本地默认用户（凭据常量在 `backend/app/auth.py`），登录与持久化走既有合约；服务端部署不得开启。前端固定账号常量在 `frontend/src/main.tsx`，与后端必须同步修改。
 - 不要把 `/api/execute` 用作练习场运行器。它是旧课内演示接口，默认返回 404；只有设置 `PYTRAIL_ENABLE_LEGACY_EXECUTE=1`、处于非生产环境且未启用无用户模式时才启用，隔离强度低，仅限本地演示。
+- 练习运行器在常规环境使用 `resolve_practice_python() -I practice_worker.py` 子进程；冻结（PyInstaller）环境改为复用 exe 自身 `--pytrail-practice-worker` 参数并加 2 秒引导超时余量，Windows 下统一 `CREATE_NO_WINDOW`。两套分支都必须保留现有 env 剥离与超时边界。
 - 认证接口每个路径和客户端 IP 每 60 秒最多 5 次；练习运行每个用户/IP（无用户模式为 IP）每 60 秒最多 20 次。限流器是单进程内存状态，生产多实例必须在反向代理或网关补充全局限流。
 - 普通生产模式必须使用非已知默认值且至少 16 个字符的 `SECRET_KEY`；无用户模式不依赖 JWT，启动时跳过这项校验，但仍不应把临时配置直接暴露到公网。
 - 数据库写入需要显式事务语义。练习进度的并发更新必须保持原子 upsert 和通过状态不降级。
@@ -105,6 +109,12 @@ pnpm lint
 pnpm format:check
 pnpm test
 pnpm build
+
+# Windows desktop packaging (onedir; output in backend/dist/PyTrail/)
+cd frontend && pnpm build
+cd ../backend
+uv sync --locked
+uv run pyinstaller pytrail_desktop.spec --noconfirm
 ```
 
 ## 浏览器验收（Playwright）

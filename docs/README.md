@@ -12,6 +12,7 @@
 | [开发与运维](development.md) | 本地启动、环境变量、数据库、Docker、验证与排障 |
 | [课程内容维护](content-maintenance.md) | 新增或修改课程、课时、Markdown、图片和内部链接 |
 | [练习题维护](practice-maintenance.md) | 新增或修改函数题、案例、标签与章节映射 |
+| [桌面版打包](desktop-packaging.md) | Windows onedir 打包、本地单用户模式、数据位置与回退 |
 | [根 README](../README.md) | 项目概览、快速启动和主要入口 |
 | [AGENTS.md](../AGENTS.md) | 自动化 agent 与维护者共同遵循的仓库规则 |
 
@@ -43,6 +44,7 @@
 | --- | --- |
 | 启动命令、依赖版本、环境变量 | `README.md`、`development.md` |
 | 新增服务、数据表、路由或关键数据流 | `architecture.md` |
+| 桌面打包、本地模式或部署形态 | `desktop-packaging.md`、`AGENTS.md` |
 | 课程目录、命名规则、同步语义 | `content-maintenance.md`、`AGENTS.md` |
 | 练习 schema、runner 限制、进度语义 | `practice-maintenance.md`、`architecture.md` |
 | 面向维护者的强约束 | `AGENTS.md` |
