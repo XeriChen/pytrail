@@ -141,16 +141,15 @@ EXEC_FLAG = "--pytrail-exec-stdin"
 def legacy_execute_enabled() -> bool:
     """The legacy in-lesson playground runs unisolated `python -I -c`.
 
-    It is opt-in via `PYTRAIL_ENABLE_LEGACY_EXECUTE` and is never available in
-    production. Public deployments must use a dedicated sandbox for arbitrary
-    code execution instead of this endpoint.
+    It is on by default in local deployments (non-production, non-userless)
+    and can be turned off with `PYTRAIL_ENABLE_LEGACY_EXECUTE=0`. Public
+    deployments must use a dedicated sandbox for arbitrary code execution
+    instead of this endpoint; production always returns 404.
     """
     flag = os.getenv("PYTRAIL_ENABLE_LEGACY_EXECUTE", "").strip().lower()
-    return (
-        flag in {"1", "true", "yes", "on"}
-        and not is_production_environment()
-        and not is_userless_mode()
-    )
+    if flag in {"0", "false", "no", "off"}:
+        return False
+    return not is_production_environment() and not is_userless_mode()
 
 
 @app.get("/api/health")

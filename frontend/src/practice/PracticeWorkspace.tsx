@@ -398,7 +398,9 @@ export function PracticeWorkspace({
             value={code}
             onChange={setCode}
             extensions={[python()]}
-            theme={theme}
+            // The editor panel is a dark code surface in both app themes,
+            // so the editor itself must stay dark with syntax colors intact.
+            theme="dark"
             height="100%"
             minHeight={editorFullscreen ? '0' : '360px'}
             aria-label={zh ? 'Python 代码' : 'Python code'}

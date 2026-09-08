@@ -52,7 +52,7 @@ http://localhost:8000/docs
 | `COURSE_CONTENT_ROOT` | `backend/app/course_sync.py` | 仓库内课程目录 | 覆盖时使用包含 9 个课程 slug 子目录的根目录 |
 | `SECRET_KEY` | `backend/app/auth.py` | 开发默认值 | 生产必须使用长随机值 |
 | `PYTRAIL_ENV` / `ENV` | `backend/app/auth.py` | `development` | `production` 或 `prod` 禁止默认密钥 |
-| `PYTRAIL_ENABLE_LEGACY_EXECUTE` | `backend/app/main.py` | 关闭 | 设为 `1`/`true`/`yes`/`on` 且非生产、非无用户模式时启用旧课内演练 `/api/execute`；隔离强度低，不要向公网开放 |
+| `PYTRAIL_ENABLE_LEGACY_EXECUTE` | `backend/app/main.py` | 开启（本地） | 非生产、非无用户模式下默认启用旧课内演练 `/api/execute`，设为 `0`/`false`/`no`/`off` 显式关闭；隔离强度低，不要向公网开放 |
 | `CORS_ORIGINS` | `backend/app/main.py` | `http://localhost:5173` | 逗号分隔；生产不要使用宽泛来源 |
 | `PYTRAIL_STATIC_DIR` | `backend/app/main.py` | 未设置 | 指向包含 `index.html` 的构建目录时，API 托管静态文件并为非 API 路径提供 SPA 回退 |
 | `PYTRAIL_PRACTICE_PYTHON` | `backend/app/practice_runner.py` | API 当前解释器 | 练习 worker 使用的 Python 命令或路径；目标环境必须安装兼容版本的 RestrictedPython |

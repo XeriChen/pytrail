@@ -86,7 +86,7 @@
   --line-strong: rgba(32, 38, 34, 0.3);
   --paper: #202622;
   --paper-dim: #4f5b54;
-  --mist: #6c776f;
+  --mist: #59635c;
   --cinnabar: #b83a2c;
   --cinnabar-deep: #8d2a20;
   --gold: #8a691c;
@@ -1148,18 +1148,48 @@ button { cursor: pointer; }
 }
 .runner-head div { display: flex; align-items: center; gap: 7px; color: var(--code-text); }
 .runner-head span { font: 10px var(--font-mono); color: var(--code-muted); }
-.code-runner textarea {
+.code-area {
+  position: relative;
+  background: var(--surface-code);
+}
+.code-area-highlight,
+.code-area-input {
+  margin: 0;
+  border: 0;
+  padding: 16px;
+  font: 12px/1.7 var(--font-mono);
+  tab-size: 4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+.code-area-highlight {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: transparent;
+  color: var(--code-text);
+}
+.code-area-highlight div { min-height: 1.7em; }
+.code-area-input {
+  position: relative;
   display: block;
   width: 100%;
   height: 140px;
   resize: vertical;
-  border: 0;
-  background: var(--surface-code);
-  color: var(--code-text);
-  padding: 16px;
-  font: 12px/1.7 var(--font-mono);
+  overflow: auto;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--code-jade);
   outline: none;
+  text-shadow: none;
   cursor: text;
+  scrollbar-width: none;
+}
+.code-area-input::-webkit-scrollbar { display: none; }
+.code-area-input::selection {
+  background: rgba(239, 230, 210, 0.18);
 }
 .runner-foot {
   border-top: 1px solid var(--code-border);

@@ -39,6 +39,7 @@ import {
 } from './i18n'
 import { Particle, Vec, cardTilt, createParticles, particleColor, stepScene } from './motion'
 import { Theme, useTheme } from './theme'
+import { CodeArea } from './code-block'
 import { apiRequest as request, ApiError } from './api'
 import { PracticeRoutes } from './practice/PracticeRoutes'
 import './styles.css'
@@ -1259,6 +1260,8 @@ function CourseView({
                 <CodeRunner
                   key={lesson.id}
                   initial={lesson.exercises[0]?.starter_code || 'print("Hello, Python!")'}
+                  theme={theme}
+                  onAuth={onAuth}
                 />
                 {lesson.exercises.length > 0 ? (
                   lesson.exercises.map((exercise) => (
@@ -1348,7 +1351,15 @@ function StatePanel({
   )
 }
 
-function CodeRunner({ initial }: { initial: string }) {
+function CodeRunner({
+  initial,
+  theme,
+  onAuth,
+}: {
+  initial: string
+  theme: Theme
+  onAuth: () => void
+}) {
   const { tx } = useI18n()
   const [code, setCode] = useState(initial)
   const [output, setOutput] = useState(tx('playground.output'))
@@ -1366,6 +1377,11 @@ function CodeRunner({ initial }: { initial: string }) {
       }>('/execute', { method: 'POST', body: JSON.stringify({ code }) }, tx('request.failed'))
       setOutput(result.stdout || result.stderr || tx('playground.output'))
     } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        setOutput(tx('playground.needAuth'))
+        onAuth()
+        return
+      }
       setOutput(
         err instanceof ApiError && err.status === 404
           ? tx('playground.disabled')
@@ -1383,11 +1399,13 @@ function CodeRunner({ initial }: { initial: string }) {
         </div>
         <span>{tx('playground.lang')}</span>
       </div>
-      <textarea
+      <CodeArea
         value={code}
-        onChange={(e) => setCode(e.target.value)}
-        spellCheck={false}
-        aria-label={tx('playground.title')}
+        onChange={setCode}
+        theme={theme}
+        language="python"
+        ariaLabel={tx('playground.title')}
+        onRun={run}
       />
       <div className="runner-foot">
         <button className="run-btn" type="button" onClick={run} disabled={running}>

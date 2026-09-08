@@ -220,3 +220,116 @@ export function CodeBlock({ code, language, theme, copyLabel, copiedLabel }: Cod
     </figure>
   )
 }
+
+export interface CodeAreaProps {
+  value: string
+  onChange: (value: string) => void
+  theme: Theme
+  language?: string
+  ariaLabel: string
+  onRun?: () => void
+}
+
+export function CodeArea({
+  value,
+  onChange,
+  theme,
+  language = 'python',
+  ariaLabel,
+  onRun,
+}: CodeAreaProps) {
+  const normalized = normalizeCodeLanguage(language)
+  const [languageReady, setLanguageReady] = useState(() =>
+    Boolean(Prism.languages[normalized.language]),
+  )
+  const highlightRef = useRef<HTMLPreElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    let active = true
+    if (normalized.language === 'plain' || Prism.languages[normalized.language]) {
+      setLanguageReady(true)
+      return
+    }
+    if (!ADDITIONAL_LANGUAGES.has(normalized.language)) {
+      setLanguageReady(false)
+      return
+    }
+    setLanguageReady(false)
+    void loadAdditionalLanguages()
+      .then(() => {
+        if (active) setLanguageReady(Boolean(Prism.languages[normalized.language]))
+      })
+      .catch(() => {
+        if (active) setLanguageReady(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [normalized.language])
+
+  const canHighlight =
+    normalized.language !== 'plain' &&
+    languageReady &&
+    Boolean(Prism.languages[normalized.language])
+
+  const syncScroll = () => {
+    const input = inputRef.current
+    const layer = highlightRef.current
+    if (input && layer) {
+      layer.scrollTop = input.scrollTop
+      layer.scrollLeft = input.scrollLeft
+    }
+  }
+
+  return (
+    <div className="code-area">
+      {canHighlight ? (
+        <Highlight
+          theme={theme === 'dark' ? themes.oneDark : MINERAL_LIGHT_CODE_THEME}
+          code={`${value}\n`}
+          language={normalized.language}
+        >
+          {({ style, tokens, getLineProps, getTokenProps }) => (
+            <pre
+              ref={highlightRef}
+              aria-hidden="true"
+              className="code-area-highlight"
+              style={{ ...style, backgroundColor: 'transparent', whiteSpace: 'pre-wrap' }}
+            >
+              {tokens.map((line, lineIndex) => (
+                <div key={lineIndex} {...getLineProps({ line })}>
+                  {line.map((token, tokenIndex) => (
+                    <span key={tokenIndex} {...getTokenProps({ token })} />
+                  ))}
+                </div>
+              ))}
+            </pre>
+          )}
+        </Highlight>
+      ) : (
+        <pre aria-hidden="true" className="code-area-highlight" style={{ whiteSpace: 'pre-wrap' }}>
+          {value}
+        </pre>
+      )}
+      <textarea
+        ref={inputRef}
+        className="code-area-input"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onScroll={syncScroll}
+        onKeyDown={(event) => {
+          if (onRun && (event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+            event.preventDefault()
+            onRun()
+          }
+        }}
+        spellCheck={false}
+        autoCapitalize="off"
+        autoComplete="off"
+        autoCorrect="off"
+        aria-label={ariaLabel}
+      />
+    </div>
+  )
+}

@@ -146,6 +146,10 @@ class ApiTests(unittest.TestCase):
             self.assertFalse(progress.json()["persisted"])
             self.assertEqual(self.client.get("/api/auth/me").status_code, 404)
             self.assertEqual(self.client.get("/api/dashboard").status_code, 404)
+            self.assertEqual(
+                self.client.post("/api/execute", json={"code": "print(1)"}).status_code,
+                404,
+            )
 
         with SessionLocal() as db:
             self.assertEqual(
@@ -396,20 +400,28 @@ class ApiTests(unittest.TestCase):
             404,
         )
 
-    def test_execute_disabled_by_default(self) -> None:
+    def test_execute_enabled_by_default_in_local_development(self) -> None:
         response = self.client.post("/api/execute", json={"code": "print(1)"})
-        self.assertEqual(response.status_code, 404)
-        auth = self.register()
-        response = self.client.post(
-            "/api/execute", json={"code": "print(1)"}, headers=auth["headers"]
-        )
-        self.assertEqual(response.status_code, 404)
-
-    def test_execute_requires_auth_when_enabled(self) -> None:
-        with patch.dict(os.environ, {"PYTRAIL_ENABLE_LEGACY_EXECUTE": "1"}):
-            response = self.client.post("/api/execute", json={"code": "print(1)"})
-        self.assertNotEqual(response.status_code, 200)
         self.assertEqual(response.status_code, 401)
+        auth = self.register()
+        marker = "pytrail-default-on"
+        response = self.client.post(
+            "/api/execute",
+            json={"code": f"print({marker!r})"},
+            headers=auth["headers"],
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertTrue(body["ok"])
+        self.assertIn(marker, body["stdout"])
+
+    def test_execute_opt_out_disables_endpoint(self) -> None:
+        auth = self.register()
+        with patch.dict(os.environ, {"PYTRAIL_ENABLE_LEGACY_EXECUTE": "0"}):
+            response = self.client.post(
+                "/api/execute", json={"code": "print(1)"}, headers=auth["headers"]
+            )
+        self.assertEqual(response.status_code, 404)
 
     def test_execute_prints_stdout_when_enabled(self) -> None:
         auth = self.register()

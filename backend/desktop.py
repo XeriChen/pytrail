@@ -112,7 +112,6 @@ def configure_environment() -> Path:
     database_path = (store / "learning.db").resolve()
     os.environ.setdefault("DATABASE_URL", f"sqlite:///{database_path.as_posix()}")
     os.environ.setdefault("PYTRAIL_LOCAL_MODE", "1")
-    os.environ.setdefault("PYTRAIL_ENABLE_LEGACY_EXECUTE", "1")
     os.environ.setdefault("SECRET_KEY", load_or_create_secret_key(store / "secret.key"))
     if getattr(sys, "frozen", False):
         base = bundle_dir()

@@ -24,7 +24,7 @@ PyTrail 是一个面向 Python 学习路径的全栈应用。它将 9 门课程�
 | 内容渲染 | React Markdown、rehype-sanitize、remark-math/rehype-katex、KaTeX 0.16、Prism、Mermaid |
 | 后端 | FastAPI、SQLAlchemy 2、Pydantic 2、JWT、RestrictedPython |
 | 数据库 | 本地默认 SQLite，生产可使用 PostgreSQL |
-| 交付 | Docker Compose、GitHub Actions、PyInstaller（Windows 桌面版） |
+| 交付 | Docker Compose、GitHub Actions、CNB 流水线、PyInstaller（Windows 桌面版） |
 
 ## 仓库结构
 
@@ -175,7 +175,7 @@ CI 使用相同的质量检查、测试与构建入口。完整的验证矩阵�
 
 受信任的内网或演示部署可以设置 `PYTRAIL_USERLESS_MODE=1`：前端隐藏登录入口，练习和课内速测无需登录，服务端跳过用户、课程与练习进度写入，并让用户详情和 dashboard 返回 404。该模式仍按 IP 限流和执行限制运行，不接受旧 token，也不提供用户恢复或历史记录；旧 `/api/execute` 同样不可用。
 
-RestrictedPython 子进程不是面向敌对公网流量的完整强隔离沙箱。对外开放时，应把代码执行迁移到独立的临时容器或专用沙箱服务。旧的 `/api/execute` 演练入口默认关闭，仅在本地开发环境、未启用无用户模式且通过 `PYTRAIL_ENABLE_LEGACY_EXECUTE=1` 显式开启时可用，生产环境一律返回 404。
+RestrictedPython 子进程不是面向敌对公网流量的完整强隔离沙箱。对外开放时，应把代码执行迁移到独立的临时容器或专用沙箱服务。旧的 `/api/execute` 演练入口在本地环境（非生产、非无用户模式）默认开启，可用 `PYTRAIL_ENABLE_LEGACY_EXECUTE=0` 显式关闭；生产环境与无用户模式一律返回 404。
 
 ## 维护文档
 
