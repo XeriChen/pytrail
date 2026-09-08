@@ -1,0 +1,86 @@
+# PyTrail 云原生构建配置
+#
+# 目前只定义一条流水线：打包 Windows 桌面版（PyInstaller onedir）。
+#
+# 前置条件
+#   1. CNB 官方云端节点只有 Linux（cnb:arch:amd64 / cnb:arch:arm64:v8），
+#      PyInstaller 不能交叉编译出 Windows exe，因此必须接入自托管 Windows 构建机：
+#      根组织 / 组织设置 / 构建节点 -> 新增 Runner，节点标签包含 windows。
+#   2. 构建机预装：Git、Node 20+、pnpm、uv。Python 与后端依赖由 uv sync 负责安装。
+#   3. 自托管 Runner 直接跑在宿主机上、默认没有 Docker，因此 docker.image 与
+#      插件镜像（如 cnbcool/attachments）在这里不可用，产物留在构建机上。
+#
+# 触发方式
+#   - 推送 v* 标签：自动打包，产物版本取标签名。
+#   - 仓库页面的「构建 Windows 桌面版」按钮：见 .cnb/web_trigger.yml，产物版本取短 commit。
+#
+# 产物：构建机的 <仓库>/backend/dist/PyTrail-<版本>-win-x64.zip 与 backend/dist/PyTrail/。
+
+main:
+  web_trigger_build_exe:
+    - &build_windows_exe
+      name: build-windows-exe
+      runner:
+        # 使用当前仓库所属根组织下的自托管构建节点
+        namespace: group
+        # 节点标签需包含这里列出的每一个 tag
+        tags:
+          - windows
+      stages:
+        - name: 环境自检
+          script: |
+            $ErrorActionPreference = 'Stop'
+            cmd /c ver
+            git -v
+            node -v
+            pnpm -v
+            uv --version
+        - name: 构建前端产物
+          script: |
+            $ErrorActionPreference = 'Stop'
+            Push-Location frontend
+            try {
+              pnpm install --frozen-lockfile
+              pnpm build
+            } finally {
+              Pop-Location
+            }
+        - name: 同步后端依赖
+          script: |
+            $ErrorActionPreference = 'Stop'
+            Push-Location backend
+            try {
+              uv sync --locked
+            } finally {
+              Pop-Location
+            }
+        - name: PyInstaller 打包
+          script: |
+            $ErrorActionPreference = 'Stop'
+            Push-Location backend
+            try {
+              uv run pyinstaller pytrail_desktop.spec --noconfirm
+            } finally {
+              Pop-Location
+            }
+        - name: 压缩分发包
+          script: |
+            $ErrorActionPreference = 'Stop'
+            $version = if ($env:CNB_EVENT -eq 'tag_push') { $env:CNB_BRANCH } else { $env:CNB_COMMIT_SHORT }
+            $package = "PyTrail-$version-win-x64.zip"
+            Push-Location backend
+            try {
+              if (Test-Path "dist/$package") {
+                Remove-Item "dist/$package" -Force
+              }
+              Compress-Archive -Path 'dist/PyTrail/*' -DestinationPath "dist/$package"
+              Get-Item "dist/$package" | ForEach-Object {
+                Write-Output "$($_.FullName) ($([math]::Round($_.Length / 1MB, 1)) MB)"
+              }
+            } finally {
+              Pop-Location
+            }
+
+v*:
+  tag_push:
+    - *build_windows_exe

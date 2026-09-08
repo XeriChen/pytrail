@@ -11,6 +11,7 @@ __pycache__/
 .env
 .workbuddy/
 .superpowers/
+.zcode/
 # Reference material extracted from Python-100-Days-master.zip
 Python-100-Days-master/
 Python-100-Days-master.zip

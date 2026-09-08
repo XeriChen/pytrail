@@ -1,0 +1,9 @@
+# 仓库「云原生构建」页面的自定义按钮。
+# 点击后在自托管 Windows 构建机上执行 .cnb.yml 的 web_trigger_build_exe 流水线。
+
+branch:
+  - reg: "^main$"
+    buttons:
+      - name: 构建 Windows 桌面版
+        description: 在自托管 Windows 构建机上执行 PyInstaller，产出 PyTrail onedir 压缩包
+        event: web_trigger_build_exe

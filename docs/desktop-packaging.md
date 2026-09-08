@@ -35,6 +35,34 @@ uv run pyinstaller pytrail_desktop.spec --noconfirm
 - **uvicorn 动态导入**：spec 已列 `uvicorn.loops.auto`、`uvicorn.protocols.http.auto` 等 hiddenimports；如果新版本 uvicorn 拆分模块，启动时按报错补齐。
 - **窗口引擎**：pywebview 在 Windows 使用 .NET/WebView2。打包机缺少 WebView2 运行时时，程序回退浏览器模式（见下）；Win10/11 默认自带 WebView2。
 
+## 自动打包（CNB 流水线）
+
+仓库根目录的 `.cnb.yml` 定义了桌面版自动打包流水线，构建机产出与上面手工流程完全一致。
+
+### 为什么必须用自托管 Windows 构建机
+
+CNB 官方云端节点只有 Linux（`cnb:arch:amd64` / `cnb:arch:arm64:v8`），没有 Windows 节点；PyInstaller 也不能交叉编译出 Windows exe。因此流水线通过 `runner.namespace: group` + `runner.tags: [windows]` 调度到组织自己接入的 Windows 构建机。
+
+接入步骤：
+
+1. 进入**根组织 / 组织设置 / 构建节点**，点 **+ 新增 Runner**，填写名称，标签加上 `windows`（可再加 `x64` 等），保存。
+2. 节点初始为「离线」，点行尾的**连接指引**，在 Windows 构建机上执行弹出的一键接入脚本。
+3. 节点状态变为「在线」后即可被流水线命中。若组织设置里没有「构建节点」入口，说明该能力尚未对当前组织开放。
+
+构建机需要预装 **Git、Node 20+、pnpm、uv**；Python 与后端依赖由 `uv sync --locked` 安装。
+
+### 触发方式
+
+| 方式 | 操作 | 产物版本 |
+| --- | --- | --- |
+| 推送标签 | `git tag v1.2.0 && git push cnb v1.2.0` | 标签名 |
+| 页面按钮 | 仓库「云原生构建」页的**构建 Windows 桌面版**按钮（配置见 `.cnb/web_trigger.yml`） | 短 commit |
+
+### 产物与限制
+
+- 产物落在**构建机**上：`backend/dist/PyTrail/` 与 `backend/dist/PyTrail-<版本>-win-x64.zip`。两个路径都已被 `.gitignore` 忽略，不会入库。
+- 自托管 Runner 默认不开启 Docker 能力，脚本直接跑在宿主机上，因此 `docker.image` 与插件镜像（例如上传 Release 附件的 `cnbcool/attachments`）在这一类节点上不可用。需要把产物发布到 Release 时，先在构建机上取到 zip，再手工上传到 Release 页面。
+
 ## 运行时行为
 
 ### 环境变量与配置
