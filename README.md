@@ -116,6 +116,8 @@ uv run pyinstaller pytrail_desktop.spec --noconfirm
 
 细节（`PYTRAIL_LOCAL_MODE` 语义、密钥与数据位置、升级重置说明、排障）见 [桌面版打包](docs/desktop-packaging.md)。
 
+推送 `v*` 标签会触发 [desktop-release.yml](.github/workflows/desktop-release.yml)：先在 Ubuntu 上跑后端与前端检查，再在 GitHub 托管的 `windows-latest` 上打包并冒烟验证（包目录、冻结练习 worker、桌面版启动），最后把 `PyTrail-<标签>-win-x64.zip` 与 SHA256 校验文件发布到 GitHub Release。手工触发流水线只产出 workflow artifact，可用于发布前验证。
+
 ## 配置
 
 | 变量 | 默认值 | 说明 |

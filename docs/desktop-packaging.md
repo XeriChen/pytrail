@@ -63,6 +63,41 @@ CNB 官方云端节点只有 Linux（`cnb:arch:amd64` / `cnb:arch:arm64:v8`）�
 - 产物落在**构建机**上：`backend/dist/PyTrail/` 与 `backend/dist/PyTrail-<版本>-win-x64.zip`。两个路径都已被 `.gitignore` 忽略，不会入库。
 - 自托管 Runner 默认不开启 Docker 能力，脚本直接跑在宿主机上，因此 `docker.image` 与插件镜像（例如上传 Release 附件的 `cnbcool/attachments`）在这一类节点上不可用。需要把产物发布到 Release 时，先在构建机上取到 zip，再手工上传到 Release 页面。
 
+## 自动打包（GitHub Actions）
+
+`.github/workflows/desktop-release.yml` 是等价的 GitHub 托管流水线，执行与 CNB、与手工流程完全相同的命令（`pnpm build` → `uv sync --locked` → `uv run pyinstaller pytrail_desktop.spec --noconfirm`）。GitHub 托管的 `windows-latest` 自带 Windows 构建机，因此不需要接入自托管 Runner。
+
+### 触发方式
+
+| 方式 | 操作 | 结果 |
+| --- | --- | --- |
+| 推送标签 | `git tag v1.2.0 && git push origin v1.2.0` | 完整流水线，并创建或更新 GitHub Release |
+| 手工触发 | Actions 页面选择 Desktop Release 后 Run workflow | 只构建并保留 workflow artifact |
+| 手工触发 + `release` 开关 | 同时填写 `version`（例如 `v1.2.0`） | 额外创建或更新该标签的 Release |
+
+### 流水线结构
+
+| Job | 运行环境 | 内容 |
+| --- | --- | --- |
+| `backend-tests` | ubuntu-latest | 与 `ci.yml` 相同的 Ruff、compileall、unittest 和 API 冒烟 |
+| `frontend-tests` | ubuntu-latest | 与 `ci.yml` 相同的 lint、format:check、vitest 和生产构建 |
+| `package-windows` | windows-latest | 构建前端产物、同步后端依赖、PyInstaller 打包，随后做三项校验 |
+| `release` | ubuntu-latest | 仅在标签触发或手工勾选 `release` 时运行，创建或更新 Release 并上传 zip 与校验文件 |
+
+标签推送不会触发 `ci.yml`（它只过滤 `main` 分支），所以测试阶段内嵌在本流水线里，作为打包前的质量门。
+
+`package-windows` 在打包后依次执行三项校验：
+
+1. **包目录校验**：`PyTrail.exe` 存在，包内含 `web/index.html`、9 个课程目录和 9 份练习清单。PyInstaller 6 的 onedir 把这些 datas 放在 `dist/PyTrail/_internal`（即 `sys._MEIPASS`），校验按目录名递归查找，不假定固定层级。
+2. **冻结 worker 冒烟**：以 JSON stdio 协议直接驱动 `PyTrail.exe --pytrail-practice-worker`，断言两个用例全部通过，覆盖桌面版练习运行的冻结分支。
+3. **启动冒烟**：在隔离的 `APPDATA` 下启动 `PyTrail.exe`，等 `server.json` 出现（它只在健康检查通过后写入）后校验 `/api/health`、`/api/config` 的 `local_mode`、`/api/courses` 的 9 门课程、静态 `index.html` 和 `learning.db` 生成，最后用 `taskkill` 结束进程并打印 `desktop.log` 便于排障。
+
+### 产物
+
+- workflow artifact `pytrail-win-x64`：`PyTrail-<版本>-win-x64.zip` 与同名 `.sha256`，保留 30 天。
+- 标签触发时同一组文件挂到 GitHub Release，Release 名称与自动生成的 release notes 由 `gh release create` 生成。
+- 版本命名与 CNB 流水线一致：标签触发取标签名，手工触发取 `version` 输入，都未提供时使用 `dev-<短 commit>`。
+
 ## 运行时行为
 
 ### 环境变量与配置

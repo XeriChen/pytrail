@@ -34,7 +34,7 @@
 | 主题与视觉 token | `frontend/src/theme.ts`、`frontend/src/styles.css` |
 | 前端依赖、开发服务器和代理 | `frontend/package.json`、`frontend/vite.config.ts` |
 | 桌面版入口、打包与本地模式 | `backend/desktop.py`、`backend/pytrail_desktop.spec`、`docs/desktop-packaging.md` |
-| 自动化入口 | `.github/workflows/ci.yml`、`.cnb.yml`、`.cnb/web_trigger.yml` |
+| 自动化入口 | `.github/workflows/ci.yml`、`.github/workflows/desktop-release.yml`、`.cnb.yml`、`.cnb/web_trigger.yml` |
 
 文档与实现冲突时，先确认实现和测试，再更新文档。不要为了匹配过期文档而改变已验证的业务行为。
 

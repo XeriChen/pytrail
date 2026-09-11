@@ -147,7 +147,13 @@ git diff --check
 git status --short
 ```
 
-`.github/workflows/ci.yml` 是 CI 命令的事实来源。依赖版本、Python/Node 版本或测试入口变化时，应同步更新本文件。
+`.github/workflows/ci.yml` 是 PR 与主干 CI 命令的事实来源。依赖版本、Python/Node 版本或测试入口变化时，应同步更新本文件。
+
+### 桌面版发布流水线
+
+`.github/workflows/desktop-release.yml` 在 `v*` 标签推送和手工触发时运行：先在 Ubuntu 上重跑与 `ci.yml` 相同的后端、前端检查（标签推送不会触发 `ci.yml`，因此这些检查必须内嵌），再在 `windows-latest` 上执行 `pnpm build` → `uv sync --locked` → `pyinstaller pytrail_desktop.spec`，接着校验包目录、冻结练习 worker 和桌面版启动，最后上传 `PyTrail-<版本>-win-x64.zip` 与 `.sha256`；标签触发时这两个文件会挂到 GitHub Release。手工触发只产出 workflow artifact，适合发布前验证。细节见 [桌面版打包](desktop-packaging.md)。
+
+工作流中任何一步失败都应视为发布阻断：Windows 打包机器人与 `.cnb.yml` 执行同一套命令，如果这里通过而 CNB 失败，优先检查自托管构建机的预装工具版本。
 
 ## 按风险选择验证
 
