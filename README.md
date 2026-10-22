@@ -31,6 +31,8 @@ PyTrail 是一个面向 Python 学习路径的全栈应用。它将 9 门课程�
 ```text
 .
 |-- AGENTS.md                         # agent 与维护者协作约定
+|-- LICENSE                           # GPL-3.0 许可证全文
+|-- NOTICE                            # 授权范围与课程内容来源
 |-- backend/
 |   |-- app/                          # API、同步、模型、运行器
 |   |-- content/python-100-days/      # 课程 Markdown 与 res/ 资源
@@ -187,3 +189,9 @@ RestrictedPython 子进程不是面向敌对公网流量的完整强隔离沙箱
 - [练习题维护](docs/practice-maintenance.md)
 - [桌面版打包](docs/desktop-packaging.md)
 - [Agent 协作规则](AGENTS.md)
+
+## 许可证与内容来源
+
+PyTrail 的源代码依据 [GNU 通用公共许可证第 3 版（GPL-3.0）](LICENSE) 发布。
+
+课程正文与配图（`backend/content/python-100-days/`）改编自骆昊（jackfrued）的 [Python-100-Days](https://github.com/jackfrued/Python-100-Days)，版权归原作者所有，感谢原作者的分享。上游项目没有声明开源许可证，因此这部分内容不在本仓库 GPL-3.0 的授权范围内，复用前请先联系原作者。练习题清单（`backend/content/practice/`）属于本项目，随源代码一起按 GPL-3.0 发布。详见 [NOTICE](NOTICE)。

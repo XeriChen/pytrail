@@ -1,0 +1,14 @@
+PyTrail
+Copyright (C) 2026 XeriChen
+
+除下述例外，本仓库的源代码依据 GNU 通用公共许可证第 3 版（GPL-3.0）发布，
+许可证全文见 LICENSE 文件。
+
+例外：课程内容
+
+backend/content/python-100-days/ 目录下的课程 Markdown 与 res/ 资源改编自
+骆昊（jackfrued）的 Python-100-Days 项目：
+https://github.com/jackfrued/Python-100-Days
+
+这些内容的版权归原作者所有。上游项目没有声明开源许可证，因此它们不在本仓库
+GPL-3.0 的授权范围内。如需复用、修改或再发布这些内容，请先联系原作者取得许可。
