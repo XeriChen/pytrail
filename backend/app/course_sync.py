@@ -8,6 +8,7 @@ import posixpath
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
+from functools import cached_property
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
@@ -81,7 +82,17 @@ class LessonRecord:
 class CourseManifest:
     spec: CourseSpec
     lessons: tuple[LessonRecord, ...]
-    asset_digest: str
+    resource_dir: Path
+
+    @cached_property
+    def asset_digest(self) -> str:
+        """Digest of the course's `res/` tree, computed only when requested.
+
+        Synchronization does not compare assets, so hashing tens of megabytes
+        of images on every startup would only delay the API and desktop launch.
+        """
+        files = tuple(path for path in self.resource_dir.rglob("*") if path.is_file())
+        return _digest_files(files, self.resource_dir)
 
 
 @dataclass(frozen=True)
@@ -493,12 +504,7 @@ def build_manifests(
                     exercises=exercises,
                 )
             )
-        asset_files = tuple(path for path in resource_dir.rglob("*") if path.is_file())
-        manifests.append(
-            CourseManifest(
-                spec, tuple(records), _digest_files(asset_files, resource_dir)
-            )
-        )
+        manifests.append(CourseManifest(spec, tuple(records), resource_dir))
 
     resolved_practice_root = practice_root
     if resolved_practice_root is None and tuple(specs) == COURSE_SPECS:
@@ -690,26 +696,32 @@ def content_index_from_db(
     manifests: tuple[CourseManifest, ...],
     content_root: Path,
 ) -> ContentIndex:
-    courses = {course.slug: course for course in _course_rows(db)}
+    # Only lesson identities are needed here; the Markdown comes from the
+    # manifests, so avoid reloading the full catalog graph from the database.
+    lesson_ids: dict[str, dict[str | None, int]] = {}
+    for course_slug, source_path, lesson_id in db.execute(
+        select(Course.slug, Lesson.source_path, Lesson.id).join(Lesson.course)
+    ):
+        lesson_ids.setdefault(course_slug, {})[source_path] = lesson_id
+    known_courses = set(db.scalars(select(Course.slug)))
     lesson_sources: dict[int, str] = {}
     markdown_by_id: dict[int, str] = {}
     ids_by_source: dict[str, int] = {}
     for manifest in manifests:
-        course = courses.get(manifest.spec.slug)
-        if course is None:
+        if manifest.spec.slug not in known_courses:
             raise ContentSyncError(
                 f"Course missing after synchronization: {manifest.spec.slug}"
             )
-        lessons_by_source = {lesson.source_path: lesson for lesson in course.lessons}
+        lessons_by_source = lesson_ids.get(manifest.spec.slug, {})
         for record in manifest.lessons:
-            lesson = lessons_by_source.get(record.source_path)
-            if lesson is None:
+            lesson_id = lessons_by_source.get(record.source_path)
+            if lesson_id is None:
                 raise ContentSyncError(
                     f"Lesson missing after synchronization: {record.source_path}"
                 )
-            lesson_sources[lesson.id] = record.source_path
-            markdown_by_id[lesson.id] = record.markdown
-            ids_by_source[record.source_path] = lesson.id
+            lesson_sources[lesson_id] = record.source_path
+            markdown_by_id[lesson_id] = record.markdown
+            ids_by_source[record.source_path] = lesson_id
     link_maps = {
         lesson_id: _lesson_links(markdown_by_id[lesson_id], source, ids_by_source)
         for lesson_id, source in lesson_sources.items()
