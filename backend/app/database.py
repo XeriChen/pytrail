@@ -4,11 +4,20 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./learning.db")
-connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
-engine = create_engine(DATABASE_URL, connect_args=connect_args, future=True)
+IS_SQLITE = DATABASE_URL.startswith("sqlite")
+connect_args = {"check_same_thread": False} if IS_SQLITE else {}
+# Server databases can drop idle pooled connections (restarts, proxies,
+# idle timeouts); pre-ping replaces a dead connection instead of failing
+# the next request. SQLite has no network connection to lose.
+engine = create_engine(
+    DATABASE_URL,
+    connect_args=connect_args,
+    pool_pre_ping=not IS_SQLITE,
+    future=True,
+)
 
 
-if DATABASE_URL.startswith("sqlite"):
+if IS_SQLITE:
 
     @event.listens_for(engine, "connect")
     def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:

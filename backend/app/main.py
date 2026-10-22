@@ -387,6 +387,11 @@ def run_practice_exercise(
         )
         for case in sorted(exercise.cases, key=lambda item: item.order)
     ]
+    # The worker may run for the whole timeout. Return the pooled connection
+    # (and end the read transaction) first so concurrent runs cannot exhaust
+    # the pool or leave PostgreSQL sessions idle in transaction. The loaded
+    # `user` and `exercise` attributes stay readable after detaching.
+    db.close()
     try:
         result = run_practice(
             payload.code,
