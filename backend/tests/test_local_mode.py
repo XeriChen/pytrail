@@ -37,6 +37,19 @@ from app.main import app  # noqa: E402
 from app.models import ExerciseProgress, User  # noqa: E402
 from app.ratelimit import auth_limiter, practice_limiter  # noqa: E402
 
+
+def _dispose_test_database() -> None:
+    """Close pooled connections and delete every temp database file in play.
+
+    Under `unittest discover` another module may have configured the engine
+    first, so the engine's file can differ from this module's `_DB_PATH`.
+    """
+    engine.dispose()
+    _DB_PATH.unlink(missing_ok=True)
+    if engine.url.database:
+        Path(engine.url.database).unlink(missing_ok=True)
+
+
 # Email that no code path creates; used to prove absent provisioning.
 NOT_YET_EMAIL = "not-created@example.com"
 
@@ -51,8 +64,7 @@ class LocalModeTests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls) -> None:
         cls.client_cm.__exit__(None, None, None)
-        engine.dispose()
-        _DB_PATH.unlink(missing_ok=True)
+        _dispose_test_database()
 
     def setUp(self) -> None:
         auth_limiter.reset()
@@ -156,6 +168,12 @@ class LocalModeTests(unittest.TestCase):
 
 
 class NoLocalModeTests(unittest.TestCase):
+    @classmethod
+    def tearDownClass(cls) -> None:
+        # The app start below recreates the database after LocalModeTests
+        # removed it; close the pool and remove it again.
+        _dispose_test_database()
+
     def test_lifespan_skips_default_user_without_flag(self) -> None:
         """A fresh app start without the flag never creates the account."""
         with (
