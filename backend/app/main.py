@@ -16,11 +16,13 @@ from sqlalchemy.orm import Session, load_only, selectinload
 
 from .activity_service import LESSON_COMPLETED, QUICK_CHECK_CORRECT
 from .auth import (
+    FALSY_FLAG_VALUES,
     LOCAL_USER_EMAIL,
     LOCAL_USER_NAME,
     LOCAL_USER_PASSWORD,
     create_token,
     enforce_secret_key_policy,
+    env_flag,
     hash_password,
     is_local_mode,
     is_production_environment,
@@ -28,7 +30,12 @@ from .auth import (
     optional_current_user,
     verify_password,
 )
-from .course_sync import ContentSyncError, resolve_content_root, sync_courses
+from .course_sync import (
+    ContentIndex,
+    ContentSyncError,
+    resolve_content_root,
+    sync_courses,
+)
 from .dashboard_service import build_dashboard
 from .database import Base, SessionLocal, engine, get_db
 from .models import Course, Exercise, Lesson, User
@@ -39,6 +46,7 @@ from .practice_runner import (
     PracticeCaseInput,
     PracticeRunError,
     PracticeRunnerUnavailable,
+    failed_result,
     is_frozen_build,
     run_practice,
     worker_creationflags,
@@ -146,10 +154,23 @@ def legacy_execute_enabled() -> bool:
     deployments must use a dedicated sandbox for arbitrary code execution
     instead of this endpoint; production always returns 404.
     """
-    flag = os.getenv("PYTRAIL_ENABLE_LEGACY_EXECUTE", "").strip().lower()
-    if flag in {"0", "false", "no", "off"}:
+    if env_flag("PYTRAIL_ENABLE_LEGACY_EXECUTE") in FALSY_FLAG_VALUES:
         return False
     return not is_production_environment() and not is_userless_mode()
+
+
+def content_index() -> ContentIndex | None:
+    """Return the index built by the startup sync, if the lifespan ran."""
+    return getattr(app.state, "content_index", None)
+
+
+def require_persistent_user(user: User | None) -> User:
+    """Guard account-only endpoints: 404 in userless mode, 401 when anonymous."""
+    if is_userless_mode():
+        raise HTTPException(404, "Not found")
+    if user is None:
+        raise HTTPException(401, "Authentication required")
+    return user
 
 
 @app.get("/api/health")
@@ -199,12 +220,7 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
 
 @app.get("/api/auth/me", response_model=UserOut)
 def me(user: User | None = Depends(optional_current_user)):
-    if is_userless_mode() or user is None:
-        raise HTTPException(
-            404 if is_userless_mode() else 401,
-            "Not found" if is_userless_mode() else "Authentication required",
-        )
-    return user
+    return require_persistent_user(user)
 
 
 @app.get("/api/courses", response_model=list[CourseSummaryOut])
@@ -220,7 +236,7 @@ def courses(db: Session = Depends(get_db)):
             )
         )
     ).all()
-    index = getattr(app.state, "content_index", None)
+    index = content_index()
     rows.sort(
         key=lambda row: index.course_order.get(row.slug, row.id) if index else row.id
     )
@@ -291,7 +307,7 @@ def lesson_detail(lesson_id: int, db: Session = Depends(get_db)):
     )
     if not lesson:
         raise HTTPException(404, "Lesson not found")
-    index = getattr(app.state, "content_index", None)
+    index = content_index()
     links = index.lesson_links(lesson.id) if index else {}
     quick_checks = [item for item in lesson.exercises if item.kind == "quick_check"]
     return LessonDetailOut(
@@ -400,14 +416,7 @@ def run_practice_exercise(
             cases,
         )
     except PracticeRunError as exc:
-        result = {
-            "ok": False,
-            "passed": False,
-            "passed_count": 0,
-            "total_count": len(cases),
-            "error": str(exc),
-            "cases": [],
-        }
+        result = failed_result(str(exc), total_count=len(cases))
     except (OSError, PracticeRunnerUnavailable) as exc:
         raise HTTPException(503, "Practice runner unavailable") from exc
     result["feedback_category"] = classify_result(result)
@@ -423,7 +432,7 @@ def run_practice_exercise(
 
 @app.get("/api/course-assets/{course_slug}/{asset_path:path}")
 def course_asset(course_slug: str, asset_path: str):
-    index = getattr(app.state, "content_index", None)
+    index = content_index()
     if index is None:
         raise HTTPException(404, "Asset not found")
     try:
@@ -452,12 +461,7 @@ def course_asset(course_slug: str, asset_path: str):
 def dashboard(
     user: User | None = Depends(optional_current_user), db: Session = Depends(get_db)
 ):
-    if is_userless_mode() or user is None:
-        raise HTTPException(
-            404 if is_userless_mode() else 401,
-            "Not found" if is_userless_mode() else "Authentication required",
-        )
-    return build_dashboard(db, user)
+    return build_dashboard(db, require_persistent_user(user))
 
 
 @app.post("/api/progress")

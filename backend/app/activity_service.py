@@ -5,10 +5,9 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 
 from sqlalchemy import func, select
-from sqlalchemy.dialects.postgresql import insert as postgresql_insert
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
+from .database import dialect_insert
 from .models import LearningActivity, utc_now
 
 LESSON_COMPLETED = "lesson_completed"
@@ -24,14 +23,6 @@ def utc_activity_date(now: datetime | None = None) -> date:
     return value.astimezone(UTC).date()
 
 
-def _insert(dialect: str):
-    if dialect == "sqlite":
-        return sqlite_insert(LearningActivity)
-    if dialect == "postgresql":
-        return postgresql_insert(LearningActivity)
-    raise RuntimeError(f"Unsupported database dialect for learning activity: {dialect}")
-
-
 def build_activity_insert(
     dialect: str,
     *,
@@ -42,7 +33,7 @@ def build_activity_insert(
 ):
     if kind not in ACTIVITY_KINDS:
         raise ValueError(f"Unknown learning activity kind: {kind}")
-    statement = _insert(dialect).values(
+    statement = dialect_insert(dialect, LearningActivity, "learning activity").values(
         user_id=user_id,
         activity_date=activity_date,
         kind=kind,

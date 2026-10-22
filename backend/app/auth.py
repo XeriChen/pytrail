@@ -55,10 +55,18 @@ def is_production_environment(environment: str | None = None) -> bool:
     return resolve_environment(environment) in {"production", "prod"}
 
 
+TRUTHY_FLAG_VALUES = frozenset({"1", "true", "yes", "on"})
+FALSY_FLAG_VALUES = frozenset({"0", "false", "no", "off"})
+
+
+def env_flag(name: str) -> str:
+    """Return an environment flag normalized for TRUTHY/FALSY comparisons."""
+    return os.getenv(name, "").strip().lower()
+
+
 def is_userless_mode() -> bool:
     """Return whether this deployment intentionally has no user accounts."""
-    value = os.getenv(USERLESS_MODE_ENV, "").strip().lower()
-    return value in {"1", "true", "yes", "on"}
+    return env_flag(USERLESS_MODE_ENV) in TRUTHY_FLAG_VALUES
 
 
 def is_local_mode() -> bool:
@@ -69,8 +77,7 @@ def is_local_mode() -> bool:
     """
     if is_userless_mode():
         return False
-    value = os.getenv(LOCAL_MODE_ENV, "").strip().lower()
-    return value in {"1", "true", "yes", "on"}
+    return env_flag(LOCAL_MODE_ENV) in TRUTHY_FLAG_VALUES
 
 
 def enforce_secret_key_policy(

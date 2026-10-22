@@ -6,12 +6,11 @@ import json
 from typing import Any
 
 from sqlalchemy import case, select
-from sqlalchemy.dialects.postgresql import insert as postgresql_insert
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session, load_only, selectinload
 
 from .activity_service import PRACTICE_PASSED, record_activity
 from .course_sync import COURSE_SPECS
+from .database import dialect_insert
 from .models import Exercise, ExerciseProgress, Lesson, User, utc_now
 from .schemas import (
     PracticeCaseOut,
@@ -46,6 +45,16 @@ def exercise_lesson_summary():
     )
 
 
+def lesson_sort_key(lesson: Lesson) -> tuple[int, int]:
+    """Order lessons by course position in COURSE_SPECS, then lesson order."""
+    return COURSE_ORDER.get(lesson.course.slug, 999), lesson.order
+
+
+def exercise_sort_key(exercise: Exercise) -> tuple[int, int, int]:
+    """Order exercises by their lesson's curriculum position, then exercise order."""
+    return (*lesson_sort_key(exercise.lesson), exercise.order)
+
+
 def _rows(db: Session) -> list[Exercise]:
     rows = list(
         db.scalars(
@@ -54,13 +63,7 @@ def _rows(db: Session) -> list[Exercise]:
             .options(exercise_lesson_summary(), selectinload(Exercise.tags))
         ).unique()
     )
-    rows.sort(
-        key=lambda item: (
-            COURSE_ORDER.get(item.lesson.course.slug, 999),
-            item.lesson.order,
-            item.order,
-        )
-    )
+    rows.sort(key=exercise_sort_key)
     return rows
 
 
@@ -218,17 +221,9 @@ def exercise_detail(
 def record_run(
     db: Session, user: User, exercise: Exercise, code: str, passed: bool
 ) -> ExerciseProgress:
-    dialect = db.get_bind().dialect.name
-    if dialect == "sqlite":
-        statement = sqlite_insert(ExerciseProgress)
-    elif dialect == "postgresql":
-        statement = postgresql_insert(ExerciseProgress)
-    else:
-        raise RuntimeError(
-            f"Unsupported database dialect for practice progress: {dialect}"
-        )
-
-    statement = statement.values(
+    statement = dialect_insert(
+        db.get_bind().dialect.name, ExerciseProgress, "practice progress"
+    ).values(
         user_id=user.id,
         exercise_id=exercise.id,
         status="passed" if passed else "in_progress",

@@ -15,9 +15,10 @@ from .activity_service import (
 from .metrics import compute_streak
 from .models import Exercise, ExerciseProgress, Lesson, Progress, User
 from .practice_service import (
-    COURSE_ORDER,
     LESSON_SUMMARY_COLUMNS,
     exercise_lesson_summary,
+    exercise_sort_key,
+    lesson_sort_key,
 )
 
 
@@ -32,7 +33,7 @@ def build_dashboard(
             )
         )
     )
-    lessons.sort(key=lambda item: (COURSE_ORDER.get(item.course.slug, 999), item.order))
+    lessons.sort(key=lesson_sort_key)
     lesson_progress = {
         item.lesson_id: item
         for item in db.scalars(select(Progress).where(Progress.user_id == user.id))
@@ -53,13 +54,7 @@ def build_dashboard(
             )
         )
     )
-    exercises.sort(
-        key=lambda item: (
-            COURSE_ORDER.get(item.lesson.course.slug, 999),
-            item.lesson.order,
-            item.order,
-        )
-    )
+    exercises.sort(key=exercise_sort_key)
     exercise_progress = {
         item.exercise_id: item
         for item in db.scalars(
