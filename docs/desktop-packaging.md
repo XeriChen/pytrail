@@ -152,7 +152,7 @@ $env:PYTRAIL_DESKTOP_BROWSER = "1"; .\dist\PyTrail\PyTrail.exe
 
 ## 升级与进度重置
 
-课程内容变化触发全量目录重建并清空 `progress`、`exercise_progress` 与 `learning_activities`（现有设计）。桌面版升级（替换文件夹）若课程内容哈希变化，学习进度会重置；用户记录本身保留。升级前如需保留进度，备份 `%APPDATA%\PyTrail\learning.db 不会改变这一行为——重置由内容哈希驱动，与数据库文件无关。
+课程内容变化触发全量目录重建并清空 `progress`、`exercise_progress` 与 `learning_activities`（现有设计）。桌面版升级（替换文件夹）若课程内容哈希变化，学习进度会重置；用户记录本身保留。升级前如需保留进度，备份 `%APPDATA%\PyTrail\learning.db` 不会改变这一行为——重置由内容哈希驱动，与数据库文件无关。
 
 ## 维护注意
 
