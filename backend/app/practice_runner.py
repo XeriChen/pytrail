@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import ast
 import json
+import math
 import os
 import shutil
 import subprocess
 import sys
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -19,6 +23,14 @@ RUN_TIMEOUT_SECONDS = 2.0
 FROZEN_BOOT_ALLOWANCE_SECONDS = 2.0
 PRACTICE_PYTHON_ENV = "PYTRAIL_PRACTICE_PYTHON"
 WORKER_FLAG = "--pytrail-practice-worker"
+MAX_CONCURRENCY_ENV = "PYTRAIL_PRACTICE_MAX_CONCURRENCY"
+QUEUE_TIMEOUT_ENV = "PYTRAIL_PRACTICE_QUEUE_TIMEOUT"
+DEFAULT_MAX_CONCURRENCY = 20
+# A slot is held for at most the 2 s run timeout plus process spawn/teardown
+# (4 s on frozen builds with the boot allowance), so 5 s of queueing covers
+# about two full turnovers of every slot (one on frozen builds) while bounding
+# how long a waiting request ties up a request thread before it gets a 503.
+DEFAULT_QUEUE_TIMEOUT_SECONDS = 5.0
 
 
 class PracticeRunError(ValueError):
@@ -27,6 +39,68 @@ class PracticeRunError(ValueError):
 
 class PracticeRunnerUnavailable(RuntimeError):
     pass
+
+
+class PracticeRunnerBusy(PracticeRunnerUnavailable):
+    """Every worker slot stayed taken for the whole queue timeout."""
+
+
+class RunSlots:
+    """Process-wide cap on concurrently running practice workers.
+
+    Callers beyond the limit queue for up to `queue_timeout` seconds and then
+    fail with `PracticeRunnerBusy`. Queueing happens before the worker starts,
+    so it never eats into the submission's own execution timeout.
+    """
+
+    def __init__(self, limit: int, queue_timeout: float) -> None:
+        if limit < 1:
+            raise ValueError("limit must be at least 1")
+        if queue_timeout < 0 or not math.isfinite(queue_timeout):
+            raise ValueError("queue_timeout must be a finite number >= 0")
+        self.limit = limit
+        self.queue_timeout = queue_timeout
+        self._semaphore = threading.BoundedSemaphore(limit)
+
+    @contextmanager
+    def hold(self) -> Iterator[None]:
+        if not self._semaphore.acquire(timeout=self.queue_timeout):
+            raise PracticeRunnerBusy(
+                f"All {self.limit} practice runner slots stayed busy for "
+                f"{self.queue_timeout:g} seconds"
+            )
+        try:
+            yield
+        finally:
+            self._semaphore.release()
+
+
+def _env_number(name: str, default: float, *, integer: bool, minimum: float) -> float:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw) if integer else float(raw)
+    except ValueError:
+        value = None
+    if value is None or not math.isfinite(value) or value < minimum:
+        kind = "an integer" if integer else "a number"
+        raise ValueError(f"{name} must be {kind} >= {minimum:g}, got {raw!r}")
+    return value
+
+
+def configured_run_slots() -> RunSlots:
+    """Build the run cap from the environment; invalid values fail at startup."""
+    limit = _env_number(
+        MAX_CONCURRENCY_ENV, DEFAULT_MAX_CONCURRENCY, integer=True, minimum=1
+    )
+    queue_timeout = _env_number(
+        QUEUE_TIMEOUT_ENV, DEFAULT_QUEUE_TIMEOUT_SECONDS, integer=False, minimum=0
+    )
+    return RunSlots(int(limit), float(queue_timeout))
+
+
+RUN_SLOTS = configured_run_slots()
 
 
 @dataclass(frozen=True)
@@ -216,16 +290,20 @@ def run_practice(
         # Exe bootstrap (including antivirus scans) is not user code; only the
         # remaining budget bounds the submission itself.
         worker_timeout = timeout + FROZEN_BOOT_ALLOWANCE_SECONDS
+    command = worker_command()
     try:
-        completed = subprocess.run(
-            worker_command(),
-            input=encoded,
-            capture_output=True,
-            timeout=worker_timeout,
-            env={"PATH": os.getenv("PATH", "")},
-            check=False,
-            creationflags=worker_creationflags(),
-        )
+        # Both the interpreter and the frozen-exe worker paths share this cap;
+        # the slot is held only while the subprocess exists.
+        with RUN_SLOTS.hold():
+            completed = subprocess.run(
+                command,
+                input=encoded,
+                capture_output=True,
+                timeout=worker_timeout,
+                env={"PATH": os.getenv("PATH", "")},
+                check=False,
+                creationflags=worker_creationflags(),
+            )
     except subprocess.TimeoutExpired:
         return failed_result(
             f"Execution timed out after {timeout:g} seconds.", total_count=len(cases)

@@ -5,8 +5,10 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
+import threading
 import unittest
 import warnings
+from contextlib import contextmanager
 from datetime import UTC, date, datetime, timedelta
 from itertools import count
 from pathlib import Path
@@ -45,6 +47,7 @@ from app.models import (  # noqa: E402
     User,
 )
 from app.practice_manifest import EXERCISE_COUNTS  # noqa: E402
+from app.practice_runner import RunSlots  # noqa: E402
 from app.ratelimit import auth_limiter, practice_limiter  # noqa: E402
 
 _EMAILS = count(1)
@@ -405,6 +408,71 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(body["progress"]["status"], "passed")
         self.assertEqual(body["progress"]["attempts"], 1)
         self.assertEqual(body["progress"]["last_code"], code)
+
+    def test_practice_run_returns_503_when_runner_queue_times_out(self) -> None:
+        auth = self.register()
+        slug = "filter-and-square"
+        checked_out: list[int] = []
+
+        class RecordingSlots(RunSlots):
+            @contextmanager
+            def hold(self):
+                checked_out.append(engine.pool.checkedout())
+                with super().hold():
+                    yield
+
+        slots = RecordingSlots(1, 0.05)
+        slots._semaphore.acquire()
+        try:
+            with patch("app.practice_runner.RUN_SLOTS", slots):
+                busy = self.client.post(
+                    f"/api/practice/exercises/{slug}/run",
+                    headers=auth["headers"],
+                    json={"code": "def filter_and_square(numbers, minimum): return []"},
+                )
+        finally:
+            slots._semaphore.release()
+        self.assertEqual(busy.status_code, 503, busy.text)
+        self.assertEqual(
+            busy.json()["detail"], "Practice runner is busy. Try again in a moment."
+        )
+        self.assertEqual(busy.headers["retry-after"], "2")
+        # The queue wait happens after the pooled connection is returned.
+        self.assertEqual(checked_out, [0])
+        with SessionLocal() as db:
+            exercise = db.scalar(select(Exercise).where(Exercise.slug == slug))
+            progress = db.scalar(
+                select(ExerciseProgress).where(
+                    ExerciseProgress.user_id == auth["user"]["id"],
+                    ExerciseProgress.exercise_id == exercise.id,
+                )
+            )
+        self.assertIsNone(progress)
+
+        with patch("app.practice_runner.RUN_SLOTS", slots):
+            recovered = self.client.post(
+                f"/api/practice/exercises/{slug}/run",
+                headers=auth["headers"],
+                json={"code": "def filter_and_square(numbers, minimum): return []"},
+            )
+        self.assertEqual(recovered.status_code, 200, recovered.text)
+
+    def test_practice_run_waits_for_a_free_runner_slot(self) -> None:
+        auth = self.register()
+        slug = "filter-and-square"
+        slots = RunSlots(1, 5.0)
+        slots._semaphore.acquire()
+        releaser = threading.Timer(0.3, slots._semaphore.release)
+        with patch("app.practice_runner.RUN_SLOTS", slots):
+            releaser.start()
+            response = self.client.post(
+                f"/api/practice/exercises/{slug}/run",
+                headers=auth["headers"],
+                json={"code": "def filter_and_square(numbers, minimum): return []"},
+            )
+        releaser.join()
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["progress"]["attempts"], 1)
 
     def test_catalog_errors_and_assets_are_safe(self) -> None:
         self.assertEqual(self.client.get("/api/courses/999999").status_code, 404)

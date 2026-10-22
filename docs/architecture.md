@@ -142,6 +142,7 @@ erDiagram
 - 12 KB 源码上限；
 - 96 KB 输入和输出协议上限；
 - 2 秒总超时；
+- 每个 API 进程同时最多 20 个 worker（`PYTRAIL_PRACTICE_MAX_CONCURRENCY`），超出时在归还数据库连接后排队，最多 5 秒（`PYTRAIL_PRACTICE_QUEUE_TIMEOUT`），仍无空位返回 `503`；排队不计入执行超时，常规子进程和冻结 exe worker 共用同一上限；
 - RestrictedPython builtin 集合；
 - 禁止导入、动态求值、文件访问和私有属性遍历；
 - 支持平台上的 CPU、内存和文件描述符限制。

@@ -1,4 +1,5 @@
 import json
+import math
 import mimetypes
 import os
 import subprocess
@@ -43,8 +44,10 @@ from .practice_feedback import classify_result
 from .practice_runner import (
     FROZEN_BOOT_ALLOWANCE_SECONDS,
     MAX_SOURCE_BYTES,
+    RUN_TIMEOUT_SECONDS,
     PracticeCaseInput,
     PracticeRunError,
+    PracticeRunnerBusy,
     PracticeRunnerUnavailable,
     failed_result,
     is_frozen_build,
@@ -417,6 +420,12 @@ def run_practice_exercise(
         )
     except PracticeRunError as exc:
         result = failed_result(str(exc), total_count=len(cases))
+    except PracticeRunnerBusy as exc:
+        raise HTTPException(
+            503,
+            "Practice runner is busy. Try again in a moment.",
+            headers={"Retry-After": str(math.ceil(RUN_TIMEOUT_SECONDS))},
+        ) from exc
     except (OSError, PracticeRunnerUnavailable) as exc:
         raise HTTPException(503, "Practice runner unavailable") from exc
     result["feedback_category"] = classify_result(result)

@@ -152,11 +152,11 @@ $env:PYTRAIL_DESKTOP_BROWSER = "1"; .\dist\PyTrail\PyTrail.exe
 
 ## 升级与进度重置
 
-课程内容变化触发全量目录重建并清空 `progress`、`exercise_progress` 与 `learning_activities`（现有设计）。桌面版升级（替换文件夹）若课程内容哈希变化，学习进度会重置；用户记录本身保留。升级前如需保留进度，备份 `%APPDATA%\PyTrail\learning.db 不会改变这一行为——重置由内容哈希驱动，与数据库文件无关。
+课程内容变化触发全量目录重建并清空 `progress`、`exercise_progress` 与 `learning_activities`（现有设计）。桌面版升级（替换文件夹）若课程内容哈希变化，学习进度会重置；用户记录本身保留。升级前如需保留进度，备份 `%APPDATA%\PyTrail\learning.db` 不会改变这一行为——重置由内容哈希驱动，与数据库文件无关。
 
 ## 维护注意
 
 - 修改 `desktop.py` 的 env 注入顺序时，保持 worker 分流（`--pytrail-practice-worker`）在 `from app.main import app` 之前，否则每次练习提交都会完整启动 API。
-- `practice_runner.py` 的冻结分支超时为用户超时 + 2s 引导余量（exe 启动含杀毒扫描，不应计入用户代码时限）。
+- `practice_runner.py` 的冻结分支超时为用户超时 + 2s 引导余量（exe 启动含杀毒扫描，不应计入用户代码时限）。冻结分支与常规分支共用同一个并发上限（`PYTRAIL_PRACTICE_MAX_CONCURRENCY`，默认 20），名额在 API 进程内计数，worker 子进程不读取这两个变量。
 - 前端 `LOCAL_ACCOUNT` 常量（`frontend/src/main.tsx`）与后端 `LOCAL_USER_EMAIL`/`LOCAL_USER_PASSWORD`（`backend/app/auth.py`）必须同步修改。
 - 桌面版验收要点：窗口打开、免登录进入、课程图片正常、跑一道练习题（走冻结 worker 分支）、确认 learning.db 生成且进度行写入、关窗后进程退出、二次双击只开新窗口不开第二服务。
