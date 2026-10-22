@@ -73,6 +73,18 @@ BLOCKED_CALLS = frozenset(
 )
 
 
+def failed_result(error: str, *, total_count: int) -> dict[str, Any]:
+    """Build the run-result contract for a submission that never ran its cases."""
+    return {
+        "ok": False,
+        "passed": False,
+        "passed_count": 0,
+        "total_count": total_count,
+        "error": error,
+        "cases": [],
+    }
+
+
 def resolve_practice_python() -> str:
     """Resolve the interpreter used by the restricted worker subprocess.
 
@@ -215,14 +227,9 @@ def run_practice(
             creationflags=worker_creationflags(),
         )
     except subprocess.TimeoutExpired:
-        return {
-            "ok": False,
-            "passed": False,
-            "passed_count": 0,
-            "total_count": len(cases),
-            "error": f"Execution timed out after {timeout:g} seconds.",
-            "cases": [],
-        }
+        return failed_result(
+            f"Execution timed out after {timeout:g} seconds.", total_count=len(cases)
+        )
 
     if len(completed.stdout) > MAX_OUTPUT_BYTES:
         raise PracticeRunnerUnavailable("Runner output exceeded the limit")

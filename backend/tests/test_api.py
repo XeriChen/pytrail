@@ -376,6 +376,36 @@ class ApiTests(unittest.TestCase):
             )
             self.assertEqual(progress.attempts, 1)
 
+    def test_practice_run_releases_db_connection_while_worker_runs(self) -> None:
+        auth = self.register()
+        slug = "filter-and-square"
+        checked_out: list[int] = []
+
+        def fake_run(_code, _function_name, _parameters, cases):
+            checked_out.append(engine.pool.checkedout())
+            return {
+                "ok": True,
+                "passed": True,
+                "passed_count": len(cases),
+                "total_count": len(cases),
+                "error": None,
+                "cases": [],
+            }
+
+        code = "def filter_and_square(numbers, minimum): return []"
+        with patch("app.main.run_practice", side_effect=fake_run):
+            response = self.client.post(
+                f"/api/practice/exercises/{slug}/run",
+                headers=auth["headers"],
+                json={"code": code},
+            )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(checked_out, [0])
+        body = response.json()
+        self.assertEqual(body["progress"]["status"], "passed")
+        self.assertEqual(body["progress"]["attempts"], 1)
+        self.assertEqual(body["progress"]["last_code"], code)
+
     def test_catalog_errors_and_assets_are_safe(self) -> None:
         self.assertEqual(self.client.get("/api/courses/999999").status_code, 404)
         self.assertEqual(self.client.get("/api/lessons/999999").status_code, 404)

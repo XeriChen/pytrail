@@ -3,27 +3,17 @@
 from __future__ import annotations
 
 from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert as postgresql_insert
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from .activity_service import record_activity
+from .database import dialect_insert
 from .models import Progress, utc_now
-
-
-def _insert(dialect: str):
-    if dialect == "sqlite":
-        return sqlite_insert(Progress)
-    if dialect == "postgresql":
-        return postgresql_insert(Progress)
-    raise RuntimeError(f"Unsupported database dialect for lesson progress: {dialect}")
 
 
 def build_progress_upsert(
     dialect: str, *, user_id: int, lesson_id: int, completed: bool, score: int
 ):
-    statement = _insert(dialect)
-    statement = statement.values(
+    statement = dialect_insert(dialect, Progress, "lesson progress").values(
         user_id=user_id,
         lesson_id=lesson_id,
         completed=completed,
