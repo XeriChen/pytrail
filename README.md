@@ -132,6 +132,8 @@ uv run pyinstaller pytrail_desktop.spec --noconfirm
 | `CORS_ORIGINS` | `http://localhost:5173` | 逗号分隔的允许来源 |
 | `PYTRAIL_STATIC_DIR` | 未设置 | 指向包含 `index.html` 的前端构建目录时，API 同时托管静态文件并提供 SPA 回退 |
 | `PYTRAIL_PRACTICE_PYTHON` | API 当前解释器 | 练习 worker 使用的 Python 命令或路径；临时本机部署可显式指向本机虚拟环境 |
+| `PYTRAIL_PRACTICE_MAX_CONCURRENCY` | `20` | 单个 API 进程内同时运行的练习 worker 上限，必须是不小于 1 的整数 |
+| `PYTRAIL_PRACTICE_QUEUE_TIMEOUT` | `5` | 名额占满时练习运行请求最多排队的秒数，可为小数，`0` 表示不排队；超时返回 `503` |
 | `PYTRAIL_USERLESS_MODE` | 关闭 | 设为 `1`/`true`/`yes`/`on` 后关闭登录注册、用户详情、dashboard 和所有进度写入，练习与速测可匿名运行；旧 `/api/execute` 也保持关闭。与 `PYTRAIL_LOCAL_MODE` 同时设置时本模式优先 |
 | `PYTRAIL_LOCAL_MODE` | 关闭 | 桌面版专用：设为 `1`/`true`/`yes`/`on` 后启动时自动创建并使用本地默认用户（`local@pytrail.local`），进度正常持久化；仅限本机单用户场景，服务端部署不要开启 |
 | `VITE_API_URL` | `/api` | 前端请求 API 的基础路径 |
@@ -175,7 +177,7 @@ CI 使用相同的质量检查、测试与构建入口。完整的验证矩阵�
 
 ## 安全边界
 
-练习场运行器只面向受控的函数题，默认要求登录，并限制为每个用户/IP 每分钟 20 次。提交源码最大 12 KB，总执行超时 2 秒。导入、文件、网络、子进程、动态求值和私有属性遍历会被拒绝。认证注册和登录分别按路径与客户端 IP 每分钟最多 5 次；这些限流器是单进程内存状态，多实例部署应在网关补充全局限流。
+练习场运行器只面向受控的函数题，默认要求登录，并限制为每个用户/IP 每分钟 20 次。提交源码最大 12 KB，总执行超时 2 秒。每个 API 进程同时最多运行 20 个练习 worker（`PYTRAIL_PRACTICE_MAX_CONCURRENCY`），超出的请求最多排队 5 秒（`PYTRAIL_PRACTICE_QUEUE_TIMEOUT`），仍无空位时返回 `503` 且不计入尝试次数；该上限同样是单进程状态，多进程或多实例部署的总并发是各进程上限之和。导入、文件、网络、子进程、动态求值和私有属性遍历会被拒绝。认证注册和登录分别按路径与客户端 IP 每分钟最多 5 次；这些限流器是单进程内存状态，多实例部署应在网关补充全局限流。
 
 受信任的内网或演示部署可以设置 `PYTRAIL_USERLESS_MODE=1`：前端隐藏登录入口，练习和课内速测无需登录，服务端跳过用户、课程与练习进度写入，并让用户详情和 dashboard 返回 404。该模式仍按 IP 限流和执行限制运行，不接受旧 token，也不提供用户恢复或历史记录；旧 `/api/execute` 同样不可用。
 

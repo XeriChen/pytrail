@@ -56,6 +56,8 @@ http://localhost:8000/docs
 | `CORS_ORIGINS` | `backend/app/main.py` | `http://localhost:5173` | 逗号分隔；生产不要使用宽泛来源 |
 | `PYTRAIL_STATIC_DIR` | `backend/app/main.py` | 未设置 | 指向包含 `index.html` 的构建目录时，API 托管静态文件并为非 API 路径提供 SPA 回退 |
 | `PYTRAIL_PRACTICE_PYTHON` | `backend/app/practice_runner.py` | API 当前解释器 | 练习 worker 使用的 Python 命令或路径；目标环境必须安装兼容版本的 RestrictedPython |
+| `PYTRAIL_PRACTICE_MAX_CONCURRENCY` | `backend/app/practice_runner.py` | `20` | 单个 API 进程内同时运行的练习 worker 上限（常规与冻结桌面版共用）；必须是不小于 1 的整数，否则启动失败 |
+| `PYTRAIL_PRACTICE_QUEUE_TIMEOUT` | `backend/app/practice_runner.py` | `5` | 名额占满时最多排队的秒数，可为小数，`0` 表示不排队；必须是有限且不小于 0 的数，否则启动失败。排队发生在归还数据库连接之后、worker 启动之前，不占用 2 秒执行时限 |
 | `PYTRAIL_USERLESS_MODE` | `backend/app/auth.py`、`backend/app/main.py` | 关闭 | 设为 `1`/`true`/`yes`/`on` 后关闭登录注册、用户详情、dashboard 和所有进度写入，练习与速测允许匿名运行；旧 `/api/execute` 保持关闭 |
 | `VITE_API_URL` | `frontend/src/api.ts` | `/api` | 构建期变量 |
 | `VITE_API_PROXY_TARGET` | `frontend/vite.config.ts` | `http://127.0.0.1:8000` | 仅 Vite 开发代理 |
@@ -200,7 +202,8 @@ git status --short
 
 - `429`：用户/IP 在一分钟内超过 20 次运行；
 - `413`：UTF-8 源码超过 12 KB；
-- `503`：子进程、协议或运行基础设施不可用，不应写入尝试次数。
+- `503`：子进程、协议或运行基础设施不可用，不应写入尝试次数；
+- `503` 且 `detail` 为 `Practice runner is busy. Try again in a moment.`（带 `Retry-After: 2`）：本进程的练习 worker 名额（`PYTRAIL_PRACTICE_MAX_CONCURRENCY`）在 `PYTRAIL_PRACTICE_QUEUE_TIMEOUT` 秒内一直占满，同样不写入尝试次数。持续出现时检查是否有大量超时提交，再考虑调整这两个变量或横向扩容。
 
 ### Mermaid 在某个主题不可读
 

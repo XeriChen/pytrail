@@ -130,6 +130,7 @@ backend/content/practice/<course-slug>.json
 - 总超时 2 秒；
 - 单个返回值 JSON 最大约 16 KB；
 - 每个用户/IP 每分钟最多 20 次；
+- 每个 API 进程同时最多运行 20 个 worker，超出时最多排队 5 秒，之后返回 `503`（见 `PYTRAIL_PRACTICE_MAX_CONCURRENCY`、`PYTRAIL_PRACTICE_QUEUE_TIMEOUT`）；
 - 只有登录用户可运行。
 
 worker 默认使用 API 当前解释器。临时非 Docker 部署可通过 `PYTRAIL_PRACTICE_PYTHON` 指向本机 Python；该解释器必须安装兼容版本的 RestrictedPython。这个设置只改变解释器选择，不关闭 AST 校验、`-I`、独立子进程、总超时或协议限制，也不提供容器级隔离。

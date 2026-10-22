@@ -77,6 +77,7 @@
 - `PYTRAIL_LOCAL_MODE` 是桌面版专用标志：lifespan 幂等创建本地默认用户（凭据常量在 `backend/app/auth.py`），登录与持久化走既有合约；服务端部署不得开启。前端固定账号常量在 `frontend/src/main.tsx`，与后端必须同步修改。
 - 不要把 `/api/execute` 用作练习场运行器。它是旧课内演示接口，本地环境（非生产、非无用户模式）默认启用，`PYTRAIL_ENABLE_LEGACY_EXECUTE=0`/`false`/`no`/`off` 可显式关闭，生产环境一律返回 404；隔离强度低，仅限本机演示。
 - 练习运行器在常规环境使用 `resolve_practice_python() -I practice_worker.py` 子进程；冻结（PyInstaller）环境改为复用 exe 自身 `--pytrail-practice-worker` 参数并加 2 秒引导超时余量，Windows 下统一 `CREATE_NO_WINDOW`。两套分支都必须保留现有 env 剥离与超时边界。
+- 练习 worker 的并发上限由 `practice_runner.RUN_SLOTS` 统一控制（`PYTRAIL_PRACTICE_MAX_CONCURRENCY` 默认 20，`PYTRAIL_PRACTICE_QUEUE_TIMEOUT` 默认 5 秒），常规与冻结分支共用；名额只在子进程存续期间持有，排队必须发生在 `db.close()` 之后，排队超时返回 `503` 且不写入尝试次数。该上限与限流器一样是单进程状态。
 - 认证接口每个路径和客户端 IP 每 60 秒最多 5 次；练习运行每个用户/IP（无用户模式为 IP）每 60 秒最多 20 次。限流器是单进程内存状态，生产多实例必须在反向代理或网关补充全局限流。
 - 普通生产模式必须使用非已知默认值且至少 16 个字符的 `SECRET_KEY`；无用户模式不依赖 JWT，启动时跳过这项校验，但仍不应把临时配置直接暴露到公网。
 - 数据库写入需要显式事务语义。练习进度的并发更新必须保持原子 upsert 和通过状态不降级。
