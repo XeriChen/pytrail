@@ -461,7 +461,11 @@ def update_progress(
     user: User | None = Depends(optional_current_user),
     db: Session = Depends(get_db),
 ):
-    lesson = db.get(Lesson, payload.lesson_id)
+    lesson = db.get(
+        Lesson,
+        payload.lesson_id,
+        options=[load_only(Lesson.id, Lesson.source_path)],
+    )
     if lesson is None:
         raise HTTPException(404, "Lesson not found")
     if is_userless_mode():

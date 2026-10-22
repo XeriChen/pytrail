@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import case, select
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, load_only, selectinload
 
 from .activity_service import PRACTICE_PASSED, record_activity
 from .course_sync import COURSE_SPECS
@@ -28,6 +28,22 @@ from .schemas import (
 DIFFICULTIES = frozenset({"easy", "medium", "hard"})
 STATUSES = frozenset({"not_started", "in_progress", "passed"})
 COURSE_ORDER = {spec.slug: position for position, spec in enumerate(COURSE_SPECS)}
+# Lesson columns the practice and dashboard views read. Leaving out
+# `Lesson.markdown` keeps every catalog request from loading lesson bodies.
+LESSON_SUMMARY_COLUMNS = (
+    Lesson.id,
+    Lesson.course_id,
+    Lesson.title,
+    Lesson.order,
+    Lesson.duration,
+)
+
+
+def exercise_lesson_summary():
+    """Eager-load an exercise's lesson summary and course, without the body."""
+    return selectinload(Exercise.lesson).options(
+        load_only(*LESSON_SUMMARY_COLUMNS), selectinload(Lesson.course)
+    )
 
 
 def _rows(db: Session) -> list[Exercise]:
@@ -35,11 +51,7 @@ def _rows(db: Session) -> list[Exercise]:
         db.scalars(
             select(Exercise)
             .where(Exercise.kind == "function")
-            .options(
-                selectinload(Exercise.lesson).selectinload(Lesson.course),
-                selectinload(Exercise.tags),
-                selectinload(Exercise.cases),
-            )
+            .options(exercise_lesson_summary(), selectinload(Exercise.tags))
         ).unique()
     )
     rows.sort(
@@ -161,7 +173,7 @@ def get_exercise(db: Session, slug: str) -> Exercise | None:
         select(Exercise)
         .where(Exercise.kind == "function", Exercise.slug == slug)
         .options(
-            selectinload(Exercise.lesson).selectinload(Lesson.course),
+            exercise_lesson_summary(),
             selectinload(Exercise.tags),
             selectinload(Exercise.cases),
         )
